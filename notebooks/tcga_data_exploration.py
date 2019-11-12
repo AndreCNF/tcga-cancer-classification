@@ -101,7 +101,6 @@ client.upload_file(f'{project_path}embedding.py')
 # + {"colab": {}, "colab_type": "code", "id": "fZCUmUOzCPeI"}
 import plotly.offline as py
 plotly.offline.init_notebook_mode(connected=True)
-# -
 
 # + {"toc-hr-collapsed": false, "cell_type": "markdown"}
 # ## Exploring the preprocessed dataset
