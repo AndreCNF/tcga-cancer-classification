@@ -1,0 +1,618 @@
+# -*- coding: utf-8 -*-
+# ---
+# jupyter:
+#   jupytext:
+#     formats: ipynb,py:light
+#     text_representation:
+#       extension: .py
+#       format_name: light
+#       format_version: '1.4'
+#       jupytext_version: 1.2.3
+#   kernelspec:
+#     display_name: Python 3
+#     language: python
+#     name: python3
+# ---
+
+# # TCGA Data Exploration
+# ---
+#
+# Exploring the preprocessed TCGA dataset from the Pancancer paper (https://www.ncbi.nlm.nih.gov/pubmed/29625048).
+#
+# The Cancer Genome Atlas (TCGA), a landmark cancer genomics program, molecularly characterized over 20,000 primary cancer and matched normal samples spanning 33 cancer types. This joint effort between the National Cancer Institute and the National Human Genome Research Institute began in 2006, bringing together researchers from diverse disciplines and multiple institutions.
+
+# + {"colab_type": "text", "id": "KOdmFzXqF7nq", "toc-hr-collapsed": true, "cell_type": "markdown"}
+# ## Importing the necessary packages
+
+# + {"colab": {}, "colab_type": "code", "id": "G5RrWE9R_Nkl"}
+import dask.dataframe as dd                # Dask to handle big data in dataframes
+import pandas as pd                        # Pandas to handle the data in dataframes
+from dask.distributed import Client        # Dask scheduler
+import re                                  # re to do regex searches in string data
+import plotly                              # Plotly for interactive and pretty plots
+import plotly.graph_objs as go
+from datetime import datetime              # datetime to use proper date and time formats
+import os                                  # os handles directory/workspace changes
+import numpy as np                         # NumPy to handle numeric and NaN operations
+from tqdm import tqdm_notebook             # tqdm allows to track code execution progress
+import numbers                             # numbers allows to check if data is numeric
+import torch                               # PyTorch to create and apply deep learning models
+from torch.utils.data.sampler import SubsetRandomSampler
+import data_utils as du                    # Data science and machine learning relevant methods
+# -
+
+# Allow pandas to show more columns:
+
+pd.set_option('display.max_columns', 1000)
+pd.set_option('display.max_rows', 1000)
+
+# Set the random seed for reproducibility:
+
+du.set_random_seed(42)
+
+# Debugging packages
+import pixiedust                           # Debugging in Jupyter Notebook cells
+
+# +
+# Change to parent directory (presumably "Documents")
+os.chdir("../../..")
+
+# Path to the dataset files
+data_path = 'storage/data/TCGA-Pancancer/'
+rppa_folder = 'fcbb373e-28d4-4818-92f3-601ede3da5e1/'
+dna_mthltn_folder = 'd82e2c44-89eb-43d9-b6d3-712732bf6a53/'
+abs_anttd_pur_folder = '4f277128-f793-4354-a13d-30cc7fe9f6b5/'
+rna_folder = '3586c0da-64d0-4b74-a449-5ff4d9136611/'
+mut_folder = '1c8cfe5f-e52d-41ba-94da-f15ea1337efc/'
+mirna_folder = '1c6174d9-8ffb-466e-b5ee-07b204c15cf8/'
+cdr_folder = '1b5f413e-a8d1-4d10-92eb-7c4ae739ed81/'
+clnc_fllw_folder = '0fc78496-818b-4896-bd83-52db1f533c5c/'
+abs_anttd_seg_folder = '0f4f5701-7b61-41ae-bda9-2805d1ca9781/'
+
+# Path to the code files
+project_path = 'GitHub/tcga-cancer-classification/'
+# -
+
+# Set up local cluster
+client = Client()
+client
+
+# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# ## RPPA data
+#
+# Reverse phase protein array (RPPA) is a high-throughput antibody-based technique with the procedures similar to that of Western blots. Proteins are extracted from tumor tissue or cultured cells, denatured by SDS , printed on nitrocellulose-coated slides followed by antibody probe. Our RPPA platform currently allows for the analysis of >1000 samples using at least 130 different antibodies.
+# -
+
+# ### Loading the data
+
+rppa_df = dd.read_csv(f'{data_path}{rppa_folder}TCGA-RPPA-pancan-clean.csv')
+rppa_df.head()
+
+rppa_df = rppa_df.repartition(npartitions=30)
+
+rppa_df.dtypes
+
+# ### Setting the index
+
+# Set `sample_id` column to be the index:
+
+rppa_df = rppa_df.set_index('sample_id')
+rppa_df.head()
+
+# Fix the index name:
+
+rppa_df = du.data_processing.rename_index(rppa_df, 'sample_id')
+rppa_df.head()
+
+# ### Checking for missing values
+
+du.search_explore.dataframe_missing_values(rppa_df)
+
+# Out of all the 200 columns, only 9 of them have missing values, with 8 having more than 49% (`ARID1A`, `ADAR1`, `ALPHACATENIN`, `TTF1`, `PARP1`, `JAB1`, `CASPASE9`, `CASPASE3`).
+
+# ### Removing unneeded features
+
+# Remove columns that have more than 40% missing values:
+
+rppa_df = du.data_processing.remove_cols_with_many_nans(rppa_df, nan_percent_thrsh=40, inplace=True)
+
+du.search_explore.dataframe_missing_values(rppa_df)
+
+# ### Normalizing data
+
+rppa_df.describe().compute().transpose()
+
+# The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
+
+# Save the dataframe before normalizing:
+
+rppa_df.to_parquet(f'{data_path}cleaned/unnormalized/rppa.parquet')
+
+# Normalize the data into a new dataframe:
+
+rppa_df_norm = du.data_processing.normalize_data(rppa_df, id_columns=['sample_id'])
+rppa_df_norm.head()
+
+# Confirm that everything is ok through the `describe` method:
+
+rppa_df_norm.describe().compute().transpose()
+
+# Save the normalized dataframe:
+
+rppa_df_norm.to_parquet(f'{data_path}cleaned/normalized/rppa.parquet')
+
+# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# ## RNA data
+#
+# Description
+# -
+
+# ### Loading the data
+
+rna_df = dd.read_csv(f'{data_path}{rna_folder}EBPlusPlusAdjustPANCAN_IlluminaHiSeq_RNASeqV2.geneExp.tsv', sep='\t', sample=1000000)
+rna_df.head()
+
+# ### Setting the index
+
+# This dataframe is inverted, i.e. the columns should switch with the rows.
+
+rna_df = du.data_processing.transpose_dataframe(rna_df, column_to_transpose='gene_id', inplace=True)
+rna_df.head()
+
+# Fix the index name:
+
+rna_df = du.data_processing.rename_index(rna_df, 'sample_id')
+rna_df.head()
+
+# ### Checking for missing values
+
+du.search_explore.dataframe_missing_values(rna_df)
+
+# No gene has more than 16% missing values.
+
+# ### Normalizing data
+
+rna_df.describe().compute().transpose()
+
+# The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
+
+# Save the dataframe before normalizing:
+
+rna_df.to_parquet(f'{data_path}cleaned/unnormalized/rna.parquet')
+
+# Normalize the data into a new dataframe:
+
+rna_df_norm = du.data_processing.normalize_data(rna_df, id_columns=['sample_id'])
+rna_df_norm.head()
+
+# Confirm that everything is ok through the `describe` method:
+
+rna_df_norm.describe().compute().transpose()
+
+# Save the normalized dataframe:
+
+rna_df_norm.to_parquet(f'{data_path}cleaned/normalized/rna.parquet')
+
+# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# ## DNA Methylation
+#
+# Description
+# -
+
+# ### Loading the data
+
+dna_mthltn_df = dd.read_csv(f'{data_path}{dna_mthltn_folder}jhu-usc.edu_PANCAN_merged_HumanMethylation27_HumanMethylation450.betaValue_whitelisted.tsv', sep='\t')
+dna_mthltn_df.head()
+
+dna_mthltn_df = dna_mthltn_df.repartition(npartitions=30)
+
+dna_mthltn_df.dtypes
+
+# ### Setting the index
+
+# This dataframe is inverted, i.e. the columns should switch with the rows.
+
+dna_mthltn_df = du.data_processing.transpose_dataframe(dna_mthltn_df, column_to_transpose='Composite Element REF', inplace=True)
+dna_mthltn_df.head()
+
+# Fix the index name:
+
+dna_mthltn_df = du.data_processing.rename_index(dna_mthltn_df, 'sample_id')
+dna_mthltn_df.head()
+
+# ### Checking for missing values
+
+du.search_explore.dataframe_missing_values(dna_mthltn_df)
+
+# The DNA composite with the most missing values only has less than 35% missingness; 
+# However, although it seems like this table has the right missing values representation, 
+# we haven't done missing values standardization.
+
+# ### Removing unneeded features
+
+# Remove columns that have more than 40% missing values:
+
+dna_mthltn_df = du.data_processing.remove_cols_with_many_nans(dna_mthltn_df, nan_percent_thrsh=40, inplace=True)
+
+du.search_explore.dataframe_missing_values(dna_mthltn_df)
+
+# ### Normalizing data
+
+dna_mthltn_df.describe().compute().transpose()
+
+# 
+
+# Save the dataframe before normalizing:
+
+dna_mthltn_df.to_parquet(f'{data_path}cleaned/unnormalized/dna_methylation.parquet')
+
+# Normalize the data into a new dataframe:
+
+dna_mthltn_df_norm = du.data_processing.normalize_data(dna_mthltn_df, id_columns=['sample_id'])
+dna_mthltn_df_norm.head()
+
+# Confirm that everything is ok through the `describe` method:
+
+dna_mthltn_df_norm.describe().compute().transpose()
+
+# Save the normalized dataframe:
+
+dna_mthltn_df_norm.to_parquet(f'{data_path}cleaned/normalized/dna_methylation.parquet')
+
+# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# ## miRNA data
+#
+# Description
+# -
+
+# ### Loading the data
+
+mirna_df = dd.read_csv(f'{data_path}{mirna_folder}pancanMiRs_EBadjOnProtocolPlatformWithoutRepsWithUnCorrectMiRs_08_04_16.csv')
+mirna_df.head()
+
+mirna_df = mirna_df.repartition(npartitions=30)
+
+mirna_df.dtypes
+
+# ### Setting the index
+
+# This dataframe is inverted, i.e. the columns should switch with the rows.
+
+mirna_df = du.data_processing.transpose_dataframe(mirna_df, column_to_transpose='Genes', inplace=True)
+mirna_df.head()
+
+# Fix the index name:
+
+mirna_df = du.data_processing.rename_index(mirna_df, 'sample_id')
+mirna_df.head()
+
+# ### Checking for missing values
+
+du.search_explore.dataframe_missing_values(mirna_df)
+
+# [TODO] Confirm if the standardization of missing values changes their percentages in this dataframe
+mirna_df = du.data_processing.standardize_missing_values_df(mirna_df)
+mirna_df.head()
+
+du.search_explore.dataframe_missing_values(mirna_df)
+
+# Absolutely no missing values in this dataframe!
+
+# ### Removing unneeded features
+
+# Remove columns that have more than 40% missing values:
+
+mirna_df = du.data_processing.remove_cols_with_many_nans(mirna_df, nan_percent_thrsh=40, inplace=True)
+
+du.search_explore.dataframe_missing_values(mirna_df)
+
+mirna_df.Correction.value_counts()
+
+# Since only 82 genes are "uncorrected" (probably means no preprocessing, such as removing batch effects, was done), we should consider removing them;
+# For now, we'll simply drop the `Correction` column.
+
+mirna_df = mirna_df.drop(columns='Correction')
+mirna_df.head()
+
+# ### Normalizing data
+
+mirna_df.describe().compute().transpose()
+
+# The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
+
+# Save the dataframe before normalizing:
+
+mirna_df.to_parquet(f'{data_path}cleaned/unnormalized/mirna.parquet')
+
+# Normalize the data into a new dataframe:
+
+mirna_df_norm = du.data_processing.normalize_data(mirna_df, id_columns=['sample_id'])
+mirna_df_norm.head()
+
+# Confirm that everything is ok through the `describe` method:
+
+mirna_df_norm.describe().compute().transpose()
+
+# Save the normalized dataframe:
+
+mirna_df_norm.to_parquet(f'{data_path}cleaned/normalized/mirna.parquet')
+
+# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# ## ABSOLUTE-annotated seg data
+#
+# This dataframe contains copy-number and copy-ratio related data.
+#
+# Copy number alterations/aberrations (CNAs) are changes in copy number that have arisen in somatic tissue (for example, just in a tumor), copy number variations (CNVs) originated from changes in copy number in germline cells (and are thus in all cells of the organism).
+# -
+
+# ### Loading the data
+
+abs_anttd_seg_df = dd.read_csv(f'{data_path}{abs_anttd_seg_folder}TCGA_mastercalls.abs_segtabs.fixed.txt', sep='\t')
+abs_anttd_seg_df.head()
+
+abs_anttd_seg_df = abs_anttd_seg_df.repartition(npartitions=30)
+
+abs_anttd_seg_df.dtypes
+
+# ### Setting the index
+
+# Set `sample_id` column to be the index:
+
+abs_anttd_seg_df = abs_anttd_seg_df.set_index('sample_id')
+abs_anttd_seg_df.head()
+
+# Fix the index name:
+
+abs_anttd_seg_df = du.data_processing.rename_index(abs_anttd_seg_df, 'sample_id')
+abs_anttd_seg_df.head()
+
+# ### Checking for missing values
+
+du.search_explore.dataframe_missing_values(abs_anttd_seg_df)
+
+# Low percentages of missing values, topping at bellow 8%.
+
+# ### Removing unneeded features
+
+# Remove columns that have more than 40% missing values:
+
+abs_anttd_seg_df = du.data_processing.remove_cols_with_many_nans(abs_anttd_seg_df, nan_percent_thrsh=40, inplace=True)
+
+du.search_explore.dataframe_missing_values(abs_anttd_seg_df)
+
+# Columns `Start`, `End` and `Num_Probes` don't seem to be relevant in this stationary (not temporal) scenario, without the need for experiment specific information.
+
+abs_anttd_seg_df = abs_anttd_seg_df.drop(columns=['Start', 'End', 'Num_Probes'], axis=1)
+abs_anttd_seg_df.head()
+
+# ### Normalizing data
+
+abs_anttd_seg_df.describe().compute().transpose()
+
+# The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
+
+# Save the dataframe before normalizing:
+
+abs_anttd_seg_df.to_parquet(f'{data_path}cleaned/unnormalized/copy_number_ratio.parquet')
+
+# Normalize the data into a new dataframe:
+
+abs_anttd_seg_df_norm = du.data_processing.normalize_data(abs_anttd_seg_df, id_columns=['sample_id'])
+abs_anttd_seg_df_norm.head()
+
+# Confirm that everything is ok through the `describe` method:
+
+abs_anttd_seg_df_norm.describe().compute().transpose()
+
+# Save the normalized dataframe:
+
+abs_anttd_seg_df_norm.to_parquet(f'{data_path}cleaned/normalized/copy_number_ratio.parquet')
+
+# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# ## ABSOLUTE purity/ploidy data
+#
+# Description
+# -
+
+# ### Loading the data
+
+abs_anttd_pur_df = dd.read_csv(f'{data_path}{abs_anttd_pur_folder}TCGA_mastercalls.abs_tables_JSedit.fixed.txt', sep='\t')
+abs_anttd_pur_df.head()
+
+abs_anttd_pur_df = abs_anttd_pur_df.repartition(npartitions=30)
+
+abs_anttd_pur_df.dtypes
+
+# ### Setting the index
+
+# Set `sample_id` column to be the index:
+
+abs_anttd_pur_df = abs_anttd_pur_df.set_index('sample_id')
+abs_anttd_pur_df.head()
+
+# Fix the index name:
+
+abs_anttd_pur_df = du.data_processing.rename_index(abs_anttd_pur_df, 'sample_id')
+abs_anttd_pur_df.head()
+
+# ### Checking for missing values
+
+du.search_explore.dataframe_missing_values(abs_anttd_pur_df)
+
+# Low percentages of missing values, topping at bellow 9%.
+
+# ### Removing unneeded features
+
+# Remove columns that have more than 40% missing values:
+
+abs_anttd_pur_df = du.data_processing.remove_cols_with_many_nans(abs_anttd_pur_df, nan_percent_thrsh=40, inplace=True)
+
+du.search_explore.dataframe_missing_values(abs_anttd_pur_df)
+
+# ### Normalizing data
+
+abs_anttd_pur_df.describe().compute().transpose()
+
+# The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
+
+# Save the dataframe before normalizing:
+
+abs_anttd_pur_df.to_parquet(f'{data_path}cleaned/unnormalized/purity_ploidy.parquet')
+
+# Normalize the data into a new dataframe:
+
+abs_anttd_pur_df_norm = du.data_processing.normalize_data(
+    abs_anttd_pur_df, id_columns=['sample_id'])
+abs_anttd_pur_df_norm.head()
+
+# Confirm that everything is ok through the `describe` method:
+
+abs_anttd_pur_df_norm.describe().compute().transpose()
+
+# Save the normalized dataframe:
+
+abs_anttd_pur_df_norm.to_parquet(f'{data_path}cleaned/normalized/purity_ploidy.parquet')
+
+# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# ## Mutations data
+#
+# Description
+# -
+
+# ### Loading the data
+
+mut_df = dd.read_csv(f'{data_path}{mut_folder}mc3.v0.2.8.PUBLIC.maf.gz',
+                      compression='gzip', header=0, sep='\t')
+mut_df.head()
+
+mut_df = mut_df.repartition(npartitions=30)
+
+mut_df.dtypes
+
+# ### Setting the index
+
+# Set `sample_id` column to be the index:
+
+mut_df = mut_df.set_index('sample_id')
+mut_df.head()
+
+# Fix the index name:
+
+mut_df = du.data_processing.rename_index(mut_df, 'sample_id')
+mut_df.head()
+
+# ### Checking for missing values
+
+du.search_explore.dataframe_missing_values(mut_df)
+
+# Out of all the 200 columns, only 9 of them have missing values, with 8 having more than 49% (`ARID1A`, `ADAR1`, `ALPHACATENIN`, `TTF1`, `PARP1`, `JAB1`, `CASPASE9`, `CASPASE3`).
+
+# ### Removing unneeded features
+
+# Remove columns that have more than 40% missing values:
+
+mut_df = du.data_processing.remove_cols_with_many_nans(mut_df, nan_percent_thrsh=40, inplace=True)
+
+du.search_explore.dataframe_missing_values(mut_df)
+
+# ### Normalizing data
+
+mut_df.describe().compute().transpose()
+
+# The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
+
+# Save the dataframe before normalizing:
+
+mut_df.to_parquet(f'{data_path}cleaned/unnormalized/mutation.parquet')
+
+# Normalize the data into a new dataframe:
+
+mut_df_norm = du.data_processing.normalize_data(mut_df, id_columns=['sample_id'])
+mut_df_norm.head()
+
+# Confirm that everything is ok through the `describe` method:
+
+mut_df_norm.describe().compute().transpose()
+
+# Save the normalized dataframe:
+
+mut_df_norm.to_parquet(f'{data_path}cleaned/normalized/mutation.parquet')
+
+# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# ## Clinical outcome (TCGA-CDR) data
+#
+# Description
+# -
+
+# ### Loading the data
+
+cdr_df = dd.read_csv(f'{data_path}{cdr_folder}TCGA-CDR-SupplementalTableS1.xlsx')
+cdr_df.head()
+
+cdr_df = cdr_df.repartition(npartitions=30)
+
+cdr_df.dtypes
+
+# ### Setting the index
+
+# Set `sample_id` column to be the index:
+
+cdr_df = cdr_df.set_index('sample_id')
+cdr_df.head()
+
+# Fix the index name:
+
+cdr_df = du.data_processing.rename_index(cdr_df, 'sample_id')
+cdr_df.head()
+
+# ### Checking for missing values
+
+du.search_explore.dataframe_missing_values(cdr_df)
+
+cdr_df = du.data_processing.standardize_missing_values_df(cdr_df)
+cdr_df.head()
+
+du.search_explore.dataframe_missing_values(cdr_df)
+
+# Considerable percentage of missing values on `ajcc_pathologic_tumor_stage` (\~37%) and `clinical_stage` (\~76%).
+# Considering the real percentages of missing values, which are higher than what we got before standardizing the missing values representation, the main features to use from this table should be `gender`, `vital_status`, `age_at_initial_pathologic_diagnosis`, `tumor_status`, `race` and `ajcc_pathologic_tumor_stage`.
+
+# ### Removing unneeded features
+
+# Remove columns that have more than 40% missing values:
+
+cdr_df = du.data_processing.remove_cols_with_many_nans(cdr_df, nan_percent_thrsh=40, inplace=True)
+
+du.search_explore.dataframe_missing_values(cdr_df)
+
+# Features such as overall survival(OS), progression-free interval(PFI), disease-free interval(DFI), and disease-specific survival(DSS) might not be relevant for this use case. Also, features related to outcomes, such as `treatment_outcome_first_course` and `death_days_to`, should be ignored, as we're classifying tumor type, regardless of the outcome.
+cdr_df = cdr_df.drop(columns=['OS', 'PFI', 'DFI', 'DSS',
+                              'treatment_outcome_first_course'
+                              'death_days_to'], axis=1)
+cdr_df.head()
+
+# ### Normalizing data
+
+cdr_df.describe().compute().transpose()
+
+# The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
+
+# Save the dataframe before normalizing:
+
+cdr_df.to_parquet(f'{data_path}cleaned/unnormalized/clinical_outcome.parquet')
+
+# Normalize the data into a new dataframe:
+
+cdr_df_norm = du.data_processing.normalize_data(cdr_df, id_columns=['sample_id'])
+cdr_df_norm.head()
+
+# Confirm that everything is ok through the `describe` method:
+
+cdr_df_norm.describe().compute().transpose()
+
+# Save the normalized dataframe:
+
+cdr_df_norm.to_parquet(f'{data_path}cleaned/normalized/clinical_outcome.parquet')
+
+# [TODO] Join all the dataframes
+# [TODO] Do imputation on the joined dataframe
