@@ -26,7 +26,8 @@
 
 # + {"colab": {}, "colab_type": "code", "id": "G5RrWE9R_Nkl"}
 import dask.dataframe as dd                # Dask to handle big data in dataframes
-import pandas as pd                        # Pandas to handle the data in dataframes
+# import pandas as pd                        # Pandas to handle the data in dataframes
+# import modin.pandas as pd
 from dask.distributed import Client        # Dask scheduler
 import re                                  # re to do regex searches in string data
 import plotly                              # Plotly for interactive and pretty plots
@@ -38,17 +39,7 @@ from tqdm import tqdm_notebook             # tqdm allows to track code execution
 import numbers                             # numbers allows to check if data is numeric
 import torch                               # PyTorch to create and apply deep learning models
 from torch.utils.data.sampler import SubsetRandomSampler
-import data_utils as du                    # Data science and machine learning relevant methods
 # -
-
-# Allow pandas to show more columns:
-
-pd.set_option('display.max_columns', 1000)
-pd.set_option('display.max_rows', 1000)
-
-# Set the random seed for reproducibility:
-
-du.set_random_seed(42)
 
 # Debugging packages
 import pixiedust                           # Debugging in Jupyter Notebook cells
@@ -73,6 +64,18 @@ abs_anttd_seg_folder = '0f4f5701-7b61-41ae-bda9-2805d1ca9781/'
 project_path = 'GitHub/tcga-cancer-classification/'
 # -
 
+import modin.pandas as pd
+import data_utils as du                    # Data science and machine learning relevant methods
+
+# Allow pandas to show more columns:
+
+pd.set_option('display.max_columns', 1000)
+pd.set_option('display.max_rows', 1000)
+
+# Set the random seed for reproducibility:
+
+du.set_random_seed(42)
+
 # Set up local cluster
 client = Client()
 client
@@ -85,7 +88,7 @@ client
 
 # ### Loading the data
 
-rppa_df = dd.read_csv(f'{data_path}{rppa_folder}TCGA-RPPA-pancan-clean.csv')
+rppa_df = pd.read_csv(f'{data_path}{rppa_folder}TCGA-RPPA-pancan-clean.csv')
 rppa_df.head()
 
 rppa_df = rppa_df.repartition(npartitions=30)
@@ -96,7 +99,7 @@ rppa_df.dtypes
 
 # Set `sample_id` column to be the index:
 
-rppa_df = rppa_df.set_index('sample_id')
+rppa_df = rppa_df.set_index('SampleID')
 rppa_df.head()
 
 # Fix the index name:
@@ -120,26 +123,34 @@ du.search_explore.dataframe_missing_values(rppa_df)
 
 # ### Normalizing data
 
-rppa_df.describe().compute().transpose()
+rppa_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
 # Save the dataframe before normalizing:
 
-rppa_df.to_parquet(f'{data_path}cleaned/unnormalized/rppa.parquet')
+rppa_df.to_csv(f'{data_path}cleaned/unnormalized/rppa_modin.csv')
 
 # Normalize the data into a new dataframe:
 
-rppa_df_norm = du.data_processing.normalize_data(rppa_df, id_columns=['sample_id'])
+rppa_df_norm = du.data_processing.normalize_data(rppa_df, id_columns=None)
+rppa_df_norm.head()
+
+rppa_df = dd.read_csv(f'{data_path}cleaned/unnormalized/rppa_modin.csv')
+rppa_df.head()
+
+rppa_df = rppa_df.repartition(npartitions=30)
+
+rppa_df_norm = du.data_processing.normalize_data(rppa_df, id_columns=None)
 rppa_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
 
-rppa_df_norm.describe().compute().transpose()
+rppa_df_norm.describe().transpose()
 
 # Save the normalized dataframe:
 
-rppa_df_norm.to_parquet(f'{data_path}cleaned/normalized/rppa.parquet')
+rppa_df_norm.to_parquet(f'{data_path}cleaned/normalized/rppa_modin.parquet')
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## RNA data
@@ -149,7 +160,7 @@ rppa_df_norm.to_parquet(f'{data_path}cleaned/normalized/rppa.parquet')
 
 # ### Loading the data
 
-rna_df = dd.read_csv(f'{data_path}{rna_folder}EBPlusPlusAdjustPANCAN_IlluminaHiSeq_RNASeqV2.geneExp.tsv', sep='\t', sample=1000000)
+rna_df = pd.read_csv(f'{data_path}{rna_folder}EBPlusPlusAdjustPANCAN_IlluminaHiSeq_RNASeqV2.geneExp.tsv', sep='\t')
 rna_df.head()
 
 # ### Setting the index
@@ -172,7 +183,10 @@ du.search_explore.dataframe_missing_values(rna_df)
 
 # ### Normalizing data
 
-rna_df.describe().compute().transpose()
+rna_df = dd.read_parquet(f'{data_path}cleaned/unnormalized/rna.parquet')
+rna_df.head()
+
+rna_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
@@ -182,16 +196,40 @@ rna_df.to_parquet(f'{data_path}cleaned/unnormalized/rna.parquet')
 
 # Normalize the data into a new dataframe:
 
-rna_df_norm = du.data_processing.normalize_data(rna_df, id_columns=['sample_id'])
+rna_df_norm = du.data_processing.normalize_data(rna_df, id_columns=None)
 rna_df_norm.head()
+
+rna_df_norm = du.data_processing.normalize_data(rna_df, id_columns=None, normalization_method=1)
+rna_df_norm.head()
+
+means = rna_df.mean()
+means
+
+stds = rna_df.std()
+stds
+
+means.transpose().values
+
+column_means = dict(means)
+column_stds = dict(stds)
+
+means['?|100130426']
+
+rna_df_norm = (rna_df - means) / stds
+rna_df_norm.head()
+
+for col in du.utils.iterations_loop(rna_df.columns, see_progress=True):
+    (rna_df[col] - means[col]) / stds[col]
+
+(rna_df[col] - column_means[col]) / column_stds[col]
 
 # Confirm that everything is ok through the `describe` method:
 
-rna_df_norm.describe().compute().transpose()
+rna_df_norm.describe().transpose()
 
 # Save the normalized dataframe:
 
-rna_df_norm.to_parquet(f'{data_path}cleaned/normalized/rna.parquet')
+rna_df_norm.to_csv(f'{data_path}cleaned/normalized/rna.csv')
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## DNA Methylation
@@ -240,7 +278,7 @@ du.search_explore.dataframe_missing_values(dna_mthltn_df)
 
 dna_mthltn_df.describe().compute().transpose()
 
-# 
+#
 
 # Save the dataframe before normalizing:
 
@@ -248,7 +286,7 @@ dna_mthltn_df.to_parquet(f'{data_path}cleaned/unnormalized/dna_methylation.parqu
 
 # Normalize the data into a new dataframe:
 
-dna_mthltn_df_norm = du.data_processing.normalize_data(dna_mthltn_df, id_columns=['sample_id'])
+dna_mthltn_df_norm = du.data_processing.normalize_data(dna_mthltn_df, id_columns=None)
 dna_mthltn_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
@@ -326,7 +364,7 @@ mirna_df.to_parquet(f'{data_path}cleaned/unnormalized/mirna.parquet')
 
 # Normalize the data into a new dataframe:
 
-mirna_df_norm = du.data_processing.normalize_data(mirna_df, id_columns=['sample_id'])
+mirna_df_norm = du.data_processing.normalize_data(mirna_df, id_columns=None)
 mirna_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
@@ -397,7 +435,7 @@ abs_anttd_seg_df.to_parquet(f'{data_path}cleaned/unnormalized/copy_number_ratio.
 
 # Normalize the data into a new dataframe:
 
-abs_anttd_seg_df_norm = du.data_processing.normalize_data(abs_anttd_seg_df, id_columns=['sample_id'])
+abs_anttd_seg_df_norm = du.data_processing.normalize_data(abs_anttd_seg_df, id_columns=None)
 abs_anttd_seg_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
@@ -461,8 +499,7 @@ abs_anttd_pur_df.to_parquet(f'{data_path}cleaned/unnormalized/purity_ploidy.parq
 
 # Normalize the data into a new dataframe:
 
-abs_anttd_pur_df_norm = du.data_processing.normalize_data(
-    abs_anttd_pur_df, id_columns=['sample_id'])
+abs_anttd_pur_df_norm = du.data_processing.normalize_data(abs_anttd_pur_df, id_columns=None)
 abs_anttd_pur_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
@@ -527,7 +564,7 @@ mut_df.to_parquet(f'{data_path}cleaned/unnormalized/mutation.parquet')
 
 # Normalize the data into a new dataframe:
 
-mut_df_norm = du.data_processing.normalize_data(mut_df, id_columns=['sample_id'])
+mut_df_norm = du.data_processing.normalize_data(mut_df, id_columns=None)
 mut_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
@@ -603,7 +640,7 @@ cdr_df.to_parquet(f'{data_path}cleaned/unnormalized/clinical_outcome.parquet')
 
 # Normalize the data into a new dataframe:
 
-cdr_df_norm = du.data_processing.normalize_data(cdr_df, id_columns=['sample_id'])
+cdr_df_norm = du.data_processing.normalize_data(cdr_df, id_columns=None)
 cdr_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
