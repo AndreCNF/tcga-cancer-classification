@@ -26,8 +26,6 @@
 
 # + {"colab": {}, "colab_type": "code", "id": "G5RrWE9R_Nkl"}
 import dask.dataframe as dd                # Dask to handle big data in dataframes
-# import pandas as pd                        # Pandas to handle the data in dataframes
-# import modin.pandas as pd
 from dask.distributed import Client        # Dask scheduler
 import re                                  # re to do regex searches in string data
 import plotly                              # Plotly for interactive and pretty plots
@@ -50,15 +48,15 @@ os.chdir("../../..")
 
 # Path to the dataset files
 data_path = 'storage/data/TCGA-Pancancer/'
-rppa_folder = 'fcbb373e-28d4-4818-92f3-601ede3da5e1/'
-dna_mthltn_folder = 'd82e2c44-89eb-43d9-b6d3-712732bf6a53/'
-abs_anttd_pur_folder = '4f277128-f793-4354-a13d-30cc7fe9f6b5/'
-rna_folder = '3586c0da-64d0-4b74-a449-5ff4d9136611/'
-mut_folder = '1c8cfe5f-e52d-41ba-94da-f15ea1337efc/'
-mirna_folder = '1c6174d9-8ffb-466e-b5ee-07b204c15cf8/'
-cdr_folder = '1b5f413e-a8d1-4d10-92eb-7c4ae739ed81/'
-clnc_fllw_folder = '0fc78496-818b-4896-bd83-52db1f533c5c/'
-abs_anttd_seg_folder = '0f4f5701-7b61-41ae-bda9-2805d1ca9781/'
+rppa_folder = 'original/fcbb373e-28d4-4818-92f3-601ede3da5e1/'
+dna_mthltn_folder = 'original/d82e2c44-89eb-43d9-b6d3-712732bf6a53/'
+abs_anttd_pur_folder = 'original/4f277128-f793-4354-a13d-30cc7fe9f6b5/'
+rna_folder = 'original/3586c0da-64d0-4b74-a449-5ff4d9136611/'
+mut_folder = 'original/1c8cfe5f-e52d-41ba-94da-f15ea1337efc/'
+mirna_folder = 'original/1c6174d9-8ffb-466e-b5ee-07b204c15cf8/'
+cdr_folder = 'original/1b5f413e-a8d1-4d10-92eb-7c4ae739ed81/'
+clnc_fllw_folder = 'original/0fc78496-818b-4896-bd83-52db1f533c5c/'
+abs_anttd_seg_folder = 'original/0f4f5701-7b61-41ae-bda9-2805d1ca9781/'
 
 # Path to the code files
 project_path = 'GitHub/tcga-cancer-classification/'
@@ -75,10 +73,6 @@ pd.set_option('display.max_rows', 1000)
 # Set the random seed for reproducibility:
 
 du.set_random_seed(42)
-
-# Set up local cluster
-client = Client()
-client
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## RPPA data
@@ -183,45 +177,18 @@ du.search_explore.dataframe_missing_values(rna_df)
 
 # ### Normalizing data
 
-rna_df = dd.read_parquet(f'{data_path}cleaned/unnormalized/rna.parquet')
-rna_df.head()
-
 rna_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
 # Save the dataframe before normalizing:
 
-rna_df.to_parquet(f'{data_path}cleaned/unnormalized/rna.parquet')
+rna_df.to_csv(f'{data_path}cleaned/unnormalized/rna.csv')
 
 # Normalize the data into a new dataframe:
 
 rna_df_norm = du.data_processing.normalize_data(rna_df, id_columns=None)
 rna_df_norm.head()
-
-rna_df_norm = du.data_processing.normalize_data(rna_df, id_columns=None, normalization_method=1)
-rna_df_norm.head()
-
-means = rna_df.mean()
-means
-
-stds = rna_df.std()
-stds
-
-means.transpose().values
-
-column_means = dict(means)
-column_stds = dict(stds)
-
-means['?|100130426']
-
-rna_df_norm = (rna_df - means) / stds
-rna_df_norm.head()
-
-for col in du.utils.iterations_loop(rna_df.columns, see_progress=True):
-    (rna_df[col] - means[col]) / stds[col]
-
-(rna_df[col] - column_means[col]) / column_stds[col]
 
 # Confirm that everything is ok through the `describe` method:
 
@@ -231,7 +198,7 @@ rna_df_norm.describe().transpose()
 
 rna_df_norm.to_csv(f'{data_path}cleaned/normalized/rna.csv')
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + {"toc-hr-collapsed": false, "cell_type": "markdown"}
 # ## DNA Methylation
 #
 # Description
@@ -239,12 +206,8 @@ rna_df_norm.to_csv(f'{data_path}cleaned/normalized/rna.csv')
 
 # ### Loading the data
 
-dna_mthltn_df = dd.read_csv(f'{data_path}{dna_mthltn_folder}jhu-usc.edu_PANCAN_merged_HumanMethylation27_HumanMethylation450.betaValue_whitelisted.tsv', sep='\t')
+dna_mthltn_df = pd.read_csv(f'{data_path}{dna_mthltn_folder}jhu-usc.edu_PANCAN_merged_HumanMethylation27_HumanMethylation450.betaValue_whitelisted.tsv', sep='\t')
 dna_mthltn_df.head()
-
-dna_mthltn_df = dna_mthltn_df.repartition(npartitions=30)
-
-dna_mthltn_df.dtypes
 
 # ### Setting the index
 
@@ -276,26 +239,34 @@ du.search_explore.dataframe_missing_values(dna_mthltn_df)
 
 # ### Normalizing data
 
-dna_mthltn_df.describe().compute().transpose()
-
-#
+dna_mthltn_df.describe().transpose()
 
 # Save the dataframe before normalizing:
 
-dna_mthltn_df.to_parquet(f'{data_path}cleaned/unnormalized/dna_methylation.parquet')
+dna_mthltn_df.to_csv(f'{data_path}cleaned/unnormalized/dna_methylation.csv')
+
+dna_mthltn_df = pd.read_csv(f'{data_path}cleaned/unnormalized/dna_methylation.csv')
+dna_mthltn_df.head()
 
 # Normalize the data into a new dataframe:
 
 dna_mthltn_df_norm = du.data_processing.normalize_data(dna_mthltn_df, id_columns=None)
 dna_mthltn_df_norm.head()
 
+try:
+    3 + g
+except Exception as e:
+    print(str(e))
+    if 'defined' in str(e):
+        print('defined')
+
 # Confirm that everything is ok through the `describe` method:
 
-dna_mthltn_df_norm.describe().compute().transpose()
+dna_mthltn_df_norm.describe().transpose()
 
 # Save the normalized dataframe:
 
-dna_mthltn_df_norm.to_parquet(f'{data_path}cleaned/normalized/dna_methylation.parquet')
+dna_mthltn_df_norm.to_csv(f'{data_path}cleaned/normalized/dna_methylation.csv')
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## miRNA data
@@ -305,12 +276,18 @@ dna_mthltn_df_norm.to_parquet(f'{data_path}cleaned/normalized/dna_methylation.pa
 
 # ### Loading the data
 
-mirna_df = dd.read_csv(f'{data_path}{mirna_folder}pancanMiRs_EBadjOnProtocolPlatformWithoutRepsWithUnCorrectMiRs_08_04_16.csv')
+mirna_df = pd.read_csv(f'{data_path}{mirna_folder}pancanMiRs_EBadjOnProtocolPlatformWithoutRepsWithUnCorrectMiRs_08_04_16.csv')
 mirna_df.head()
 
-mirna_df = mirna_df.repartition(npartitions=30)
+# ### Removing uncorrected genes
 
-mirna_df.dtypes
+mirna_df.Correction.value_counts()
+
+# Since only 82 genes are "uncorrected" (probably means no preprocessing, such as removing batch effects, was done), we should consider removing them;
+# For now, we'll simply drop the `Correction` column.
+
+mirna_df = mirna_df.drop(columns='Correction')
+mirna_df.head()
 
 # ### Setting the index
 
@@ -346,21 +323,15 @@ du.search_explore.dataframe_missing_values(mirna_df)
 
 mirna_df.Correction.value_counts()
 
-# Since only 82 genes are "uncorrected" (probably means no preprocessing, such as removing batch effects, was done), we should consider removing them;
-# For now, we'll simply drop the `Correction` column.
-
-mirna_df = mirna_df.drop(columns='Correction')
-mirna_df.head()
-
 # ### Normalizing data
 
-mirna_df.describe().compute().transpose()
+mirna_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
 # Save the dataframe before normalizing:
 
-mirna_df.to_parquet(f'{data_path}cleaned/unnormalized/mirna.parquet')
+mirna_df.to_csv(f'{data_path}cleaned/unnormalized/mirna.csv')
 
 # Normalize the data into a new dataframe:
 
@@ -369,11 +340,11 @@ mirna_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
 
-mirna_df_norm.describe().compute().transpose()
+mirna_df_norm.describe().transpose()
 
 # Save the normalized dataframe:
 
-mirna_df_norm.to_parquet(f'{data_path}cleaned/normalized/mirna.parquet')
+mirna_df_norm.to_csv(f'{data_path}cleaned/normalized/mirna.csv')
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## ABSOLUTE-annotated seg data
@@ -425,13 +396,13 @@ abs_anttd_seg_df.head()
 
 # ### Normalizing data
 
-abs_anttd_seg_df.describe().compute().transpose()
+abs_anttd_seg_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
 # Save the dataframe before normalizing:
 
-abs_anttd_seg_df.to_parquet(f'{data_path}cleaned/unnormalized/copy_number_ratio.parquet')
+abs_anttd_seg_df.to_csv(f'{data_path}cleaned/unnormalized/copy_number_ratio.csv')
 
 # Normalize the data into a new dataframe:
 
@@ -440,11 +411,11 @@ abs_anttd_seg_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
 
-abs_anttd_seg_df_norm.describe().compute().transpose()
+abs_anttd_seg_df_norm.describe().transpose()
 
 # Save the normalized dataframe:
 
-abs_anttd_seg_df_norm.to_parquet(f'{data_path}cleaned/normalized/copy_number_ratio.parquet')
+abs_anttd_seg_df_norm.to_csv(f'{data_path}cleaned/normalized/copy_number_ratio.csv')
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## ABSOLUTE purity/ploidy data
@@ -454,12 +425,8 @@ abs_anttd_seg_df_norm.to_parquet(f'{data_path}cleaned/normalized/copy_number_rat
 
 # ### Loading the data
 
-abs_anttd_pur_df = dd.read_csv(f'{data_path}{abs_anttd_pur_folder}TCGA_mastercalls.abs_tables_JSedit.fixed.txt', sep='\t')
+abs_anttd_pur_df = pd.read_csv(f'{data_path}{abs_anttd_pur_folder}TCGA_mastercalls.abs_tables_JSedit.fixed.txt', sep='\t')
 abs_anttd_pur_df.head()
-
-abs_anttd_pur_df = abs_anttd_pur_df.repartition(npartitions=30)
-
-abs_anttd_pur_df.dtypes
 
 # ### Setting the index
 
@@ -487,15 +454,17 @@ abs_anttd_pur_df = du.data_processing.remove_cols_with_many_nans(abs_anttd_pur_d
 
 du.search_explore.dataframe_missing_values(abs_anttd_pur_df)
 
+abs_anttd_pur_df['call status'].value_counts().compute()
+
 # ### Normalizing data
 
-abs_anttd_pur_df.describe().compute().transpose()
+abs_anttd_pur_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
 # Save the dataframe before normalizing:
 
-abs_anttd_pur_df.to_parquet(f'{data_path}cleaned/unnormalized/purity_ploidy.parquet')
+abs_anttd_pur_df.to_csv(f'{data_path}cleaned/unnormalized/purity_ploidy.csv')
 
 # Normalize the data into a new dataframe:
 
@@ -504,11 +473,11 @@ abs_anttd_pur_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
 
-abs_anttd_pur_df_norm.describe().compute().transpose()
+abs_anttd_pur_df_norm.describe().transpose()
 
 # Save the normalized dataframe:
 
-abs_anttd_pur_df_norm.to_parquet(f'{data_path}cleaned/normalized/purity_ploidy.parquet')
+abs_anttd_pur_df_norm.to_csv(f'{data_path}cleaned/normalized/purity_ploidy.csv')
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## Mutations data
@@ -518,11 +487,9 @@ abs_anttd_pur_df_norm.to_parquet(f'{data_path}cleaned/normalized/purity_ploidy.p
 
 # ### Loading the data
 
-mut_df = dd.read_csv(f'{data_path}{mut_folder}mc3.v0.2.8.PUBLIC.maf.gz',
-                      compression='gzip', header=0, sep='\t')
+mut_df = pd.read_csv(f'{data_path}{mut_folder}mc3.v0.2.8.PUBLIC.maf.gz',
+                     compression='gzip', header=0, sep='\t')
 mut_df.head()
-
-mut_df = mut_df.repartition(npartitions=30)
 
 mut_df.dtypes
 
@@ -552,15 +519,21 @@ mut_df = du.data_processing.remove_cols_with_many_nans(mut_df, nan_percent_thrsh
 
 du.search_explore.dataframe_missing_values(mut_df)
 
+# **Comments:**
+# * Some columns, such as `all_effects`, `Existing_variation`, `TREMBL` and `DOMAINS` seem to be lists of values, separated by commas (good candidates to use embedding bag).
+# * The sample ID that we can use to match with the other tables appears to be `Tumor_Sample_Barcode`. There's also a similar `Matched_Norm_Sample_Barcode` column, but that seems to belong to another dataset (perhaps GTEx).
+# * It looks like this table has a dot "." whenever it's a missing value.
+# * There are several columns (114), with many of them not being clear as to what they represent nor if they're actually useful for this tumor type classification task.
+
 # ### Normalizing data
 
-mut_df.describe().compute().transpose()
+mut_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
 # Save the dataframe before normalizing:
 
-mut_df.to_parquet(f'{data_path}cleaned/unnormalized/mutation.parquet')
+mut_df.to_csv(f'{data_path}cleaned/unnormalized/mutation.csv')
 
 # Normalize the data into a new dataframe:
 
@@ -569,11 +542,11 @@ mut_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
 
-mut_df_norm.describe().compute().transpose()
+mut_df_norm.describe().transpose()
 
 # Save the normalized dataframe:
 
-mut_df_norm.to_parquet(f'{data_path}cleaned/normalized/mutation.parquet')
+mut_df_norm.to_csv(f'{data_path}cleaned/normalized/mutation.csv')
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## Clinical outcome (TCGA-CDR) data
