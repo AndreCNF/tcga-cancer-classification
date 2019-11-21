@@ -85,10 +85,6 @@ du.set_random_seed(42)
 rppa_df = pd.read_csv(f'{data_path}{rppa_folder}TCGA-RPPA-pancan-clean.csv')
 rppa_df.head()
 
-rppa_df = rppa_df.repartition(npartitions=30)
-
-rppa_df.dtypes
-
 # ### Setting the index
 
 # Set `sample_id` column to be the index:
@@ -130,21 +126,13 @@ rppa_df.to_csv(f'{data_path}cleaned/unnormalized/rppa_modin.csv')
 rppa_df_norm = du.data_processing.normalize_data(rppa_df, id_columns=None)
 rppa_df_norm.head()
 
-rppa_df = dd.read_csv(f'{data_path}cleaned/unnormalized/rppa_modin.csv')
-rppa_df.head()
-
-rppa_df = rppa_df.repartition(npartitions=30)
-
-rppa_df_norm = du.data_processing.normalize_data(rppa_df, id_columns=None)
-rppa_df_norm.head()
-
 # Confirm that everything is ok through the `describe` method:
 
 rppa_df_norm.describe().transpose()
 
 # Save the normalized dataframe:
 
-rppa_df_norm.to_parquet(f'{data_path}cleaned/normalized/rppa_modin.parquet')
+rppa_df_norm.to_csv(f'{data_path}cleaned/normalized/rppa_modin.csv')
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## RNA data
@@ -198,7 +186,7 @@ rna_df_norm.describe().transpose()
 
 rna_df_norm.to_csv(f'{data_path}cleaned/normalized/rna.csv')
 
-# + {"toc-hr-collapsed": false, "cell_type": "markdown"}
+# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## DNA Methylation
 #
 # Description
@@ -245,20 +233,10 @@ dna_mthltn_df.describe().transpose()
 
 dna_mthltn_df.to_csv(f'{data_path}cleaned/unnormalized/dna_methylation.csv')
 
-dna_mthltn_df = pd.read_csv(f'{data_path}cleaned/unnormalized/dna_methylation.csv')
-dna_mthltn_df.head()
-
 # Normalize the data into a new dataframe:
 
 dna_mthltn_df_norm = du.data_processing.normalize_data(dna_mthltn_df, id_columns=None)
 dna_mthltn_df_norm.head()
-
-try:
-    3 + g
-except Exception as e:
-    print(str(e))
-    if 'defined' in str(e):
-        print('defined')
 
 # Confirm that everything is ok through the `describe` method:
 
@@ -283,8 +261,13 @@ mirna_df.head()
 
 mirna_df.Correction.value_counts()
 
-# Since only 82 genes are "uncorrected" (probably means no preprocessing, such as removing batch effects, was done), we should consider removing them;
+# Since only 81 genes are "uncorrected" (probably means no preprocessing, such as removing batch effects, was done), we should consider removing them;
 # For now, we'll simply drop the `Correction` column.
+
+mirna_df = mirna_df[mirna_df['Correction'] == 'Corrected']
+mirna_df.head()
+
+mirna_df.Correction.value_counts()
 
 mirna_df = mirna_df.drop(columns='Correction')
 mirna_df.head()
@@ -305,23 +288,7 @@ mirna_df.head()
 
 du.search_explore.dataframe_missing_values(mirna_df)
 
-# [TODO] Confirm if the standardization of missing values changes their percentages in this dataframe
-mirna_df = du.data_processing.standardize_missing_values_df(mirna_df)
-mirna_df.head()
-
-du.search_explore.dataframe_missing_values(mirna_df)
-
 # Absolutely no missing values in this dataframe!
-
-# ### Removing unneeded features
-
-# Remove columns that have more than 40% missing values:
-
-mirna_df = du.data_processing.remove_cols_with_many_nans(mirna_df, nan_percent_thrsh=40, inplace=True)
-
-du.search_explore.dataframe_missing_values(mirna_df)
-
-mirna_df.Correction.value_counts()
 
 # ### Normalizing data
 
@@ -356,18 +323,14 @@ mirna_df_norm.to_csv(f'{data_path}cleaned/normalized/mirna.csv')
 
 # ### Loading the data
 
-abs_anttd_seg_df = dd.read_csv(f'{data_path}{abs_anttd_seg_folder}TCGA_mastercalls.abs_segtabs.fixed.txt', sep='\t')
+abs_anttd_seg_df = pd.read_csv(f'{data_path}{abs_anttd_seg_folder}TCGA_mastercalls.abs_segtabs.fixed.txt', sep='\t')
 abs_anttd_seg_df.head()
-
-abs_anttd_seg_df = abs_anttd_seg_df.repartition(npartitions=30)
-
-abs_anttd_seg_df.dtypes
 
 # ### Setting the index
 
 # Set `sample_id` column to be the index:
 
-abs_anttd_seg_df = abs_anttd_seg_df.set_index('sample_id')
+abs_anttd_seg_df = abs_anttd_seg_df.set_index('Sample')
 abs_anttd_seg_df.head()
 
 # Fix the index name:
@@ -381,13 +344,15 @@ du.search_explore.dataframe_missing_values(abs_anttd_seg_df)
 
 # Low percentages of missing values, topping at bellow 8%.
 
+# ### Converting categorical features to numeric
+
+abs_anttd_seg_df.solution.value_counts()
+
+abs_anttd_seg_df.solution = abs_anttd_seg_df.solution.apply(lambda x: 1 if x == 'new' else 0)
+abs_anttd_seg_df = abs_anttd_seg_df.rename(columns={'solution': 'new_solution'})
+abs_anttd_seg_df.new_solution.value_counts()
+
 # ### Removing unneeded features
-
-# Remove columns that have more than 40% missing values:
-
-abs_anttd_seg_df = du.data_processing.remove_cols_with_many_nans(abs_anttd_seg_df, nan_percent_thrsh=40, inplace=True)
-
-du.search_explore.dataframe_missing_values(abs_anttd_seg_df)
 
 # Columns `Start`, `End` and `Num_Probes` don't seem to be relevant in this stationary (not temporal) scenario, without the need for experiment specific information.
 
@@ -395,6 +360,8 @@ abs_anttd_seg_df = abs_anttd_seg_df.drop(columns=['Start', 'End', 'Num_Probes'],
 abs_anttd_seg_df.head()
 
 # ### Normalizing data
+#
+# [TODO] Consider setting 23 as the 0 (mean) value of the `Chromosome` feature, as that's the normal value for human cells.
 
 abs_anttd_seg_df.describe().transpose()
 
@@ -432,7 +399,7 @@ abs_anttd_pur_df.head()
 
 # Set `sample_id` column to be the index:
 
-abs_anttd_pur_df = abs_anttd_pur_df.set_index('sample_id')
+abs_anttd_pur_df = abs_anttd_pur_df.set_index('sample')
 abs_anttd_pur_df.head()
 
 # Fix the index name:
@@ -446,17 +413,28 @@ du.search_explore.dataframe_missing_values(abs_anttd_pur_df)
 
 # Low percentages of missing values, topping at bellow 9%.
 
+# ### Converting categorical features to numeric
+
+abs_anttd_pur_df.solution.value_counts()
+
+abs_anttd_pur_df.solution = abs_anttd_pur_df.solution.apply(lambda x: 1 if x == 'new' else 0)
+abs_anttd_pur_df = abs_anttd_pur_df.rename(columns={'solution': 'new_solution'})
+abs_anttd_pur_df.new_solution.value_counts()
+
 # ### Removing unneeded features
 
-# Remove columns that have more than 40% missing values:
+abs_anttd_pur_df['array'].value_counts()
 
-abs_anttd_pur_df = du.data_processing.remove_cols_with_many_nans(abs_anttd_pur_df, nan_percent_thrsh=40, inplace=True)
+abs_anttd_pur_df['call status'].value_counts()
 
-du.search_explore.dataframe_missing_values(abs_anttd_pur_df)
+# We're going to remove the redundant `array` (contains a less detailed version of the `sample_id`) and the apparently irrelevant `call status`:
 
-abs_anttd_pur_df['call status'].value_counts().compute()
+abs_anttd_pur_df = abs_anttd_pur_df.drop(columns=['array', 'call status'], axis=1)
+abs_anttd_pur_df.head()
 
 # ### Normalizing data
+#
+# [TODO] Consider not removing the fraction data columns, namely `purity`, `Cancer DNA fraction` and `Subclonal genome fraction`. The only issue is how do I do imputation then, if 0 doesn't necessarily correspond to the average value.
 
 abs_anttd_pur_df.describe().transpose()
 
@@ -483,6 +461,8 @@ abs_anttd_pur_df_norm.to_csv(f'{data_path}cleaned/normalized/purity_ploidy.csv')
 # ## Mutations data
 #
 # Description
+#
+# [TODO] Ignoring mutation data for now, for the confusing, unstructured mess that it is. Consider adding it later.
 # -
 
 # ### Loading the data
@@ -556,10 +536,8 @@ mut_df_norm.to_csv(f'{data_path}cleaned/normalized/mutation.csv')
 
 # ### Loading the data
 
-cdr_df = dd.read_csv(f'{data_path}{cdr_folder}TCGA-CDR-SupplementalTableS1.xlsx')
+cdr_df = pd.read_excel(f'{data_path}{cdr_folder}TCGA-CDR-SupplementalTableS1.xlsx')
 cdr_df.head()
-
-cdr_df = cdr_df.repartition(npartitions=30)
 
 cdr_df.dtypes
 
@@ -567,7 +545,7 @@ cdr_df.dtypes
 
 # Set `sample_id` column to be the index:
 
-cdr_df = cdr_df.set_index('sample_id')
+cdr_df = cdr_df.set_index('bcr_patient_barcode')
 cdr_df.head()
 
 # Fix the index name:
@@ -595,34 +573,65 @@ cdr_df = du.data_processing.remove_cols_with_many_nans(cdr_df, nan_percent_thrsh
 
 du.search_explore.dataframe_missing_values(cdr_df)
 
-# Features such as overall survival(OS), progression-free interval(PFI), disease-free interval(DFI), and disease-specific survival(DSS) might not be relevant for this use case. Also, features related to outcomes, such as `treatment_outcome_first_course` and `death_days_to`, should be ignored, as we're classifying tumor type, regardless of the outcome.
-cdr_df = cdr_df.drop(columns=['OS', 'PFI', 'DFI', 'DSS',
-                              'treatment_outcome_first_course'
-                              'death_days_to'], axis=1)
+# Features such as overall survival (`OS`), progression-free interval (`PFI`), disease-specific survival (`DSS`), `vital_status`, `tumor_status`, `initial_pathologic_dx_year`, `birth_days_to` and `last_contact_days_to`,  might not be relevant for this use case. Also, both `type` and `histological_type` already indicate what tumor type it is, which is our intended label, so we must remove them.
+
+cdr_df = cdr_df.drop(columns=['Unnamed: 0', 'OS', 'PFI', 'DSS',
+                              'OS.time', 'DSS.time', 'PFI.time',
+                              'vital_status', 'tumor_status', 
+                              'initial_pathologic_dx_year', 'birth_days_to',
+                              'last_contact_days_to', 'type',
+                              'histological_type'], axis=1)
 cdr_df.head()
 
+# ### Converting categorical features to numeric
+
+cdr_df.gender.value_counts()
+
+cdr_df.race.value_counts()
+
+cdr_df.ajcc_pathologic_tumor_stage.value_counts()
+
+# Encode gender:
+
+cdr_df.gender = cdr_df.gender.apply(lambda x: 1 if x.lower() == 'male' else 0)
+cdr_df.gender.value_counts()
+
+# Encode race and tumor stage:
+
+features_to_encode = ['race', 'ajcc_pathologic_tumor_stage']
+
+# Dictionary that will contain the mapping between the categories and their encodings
+encod_dict = dict([('gender', dict([('male' , 1), ('female', 0)]))])
+
+for feature in features_to_encode:
+    cdr_df[feature], encod_dict[feature] = du.embedding.enum_categorical_feature(cdr_df, feature)
+
+cdr_df.head()
+
+encod_dict
+
 # ### Normalizing data
+#
+# In this table, we only need to normalize the age.
 
-cdr_df.describe().compute().transpose()
-
-# The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
+cdr_df.describe().transpose()
 
 # Save the dataframe before normalizing:
 
-cdr_df.to_parquet(f'{data_path}cleaned/unnormalized/clinical_outcome.parquet')
+cdr_df.to_csv(f'{data_path}cleaned/unnormalized/clinical_outcome.csv')
 
 # Normalize the data into a new dataframe:
 
-cdr_df_norm = du.data_processing.normalize_data(cdr_df, id_columns=None)
+cdr_df_norm = du.data_processing.normalize_data(cdr_df, id_columns=None, columns_to_normalize='age_at_initial_pathologic_diagnosis')
 cdr_df_norm.head()
 
 # Confirm that everything is ok through the `describe` method:
 
-cdr_df_norm.describe().compute().transpose()
+cdr_df_norm.describe().transpose()
 
 # Save the normalized dataframe:
 
-cdr_df_norm.to_parquet(f'{data_path}cleaned/normalized/clinical_outcome.parquet')
+cdr_df_norm.to_csv(f'{data_path}cleaned/normalized/clinical_outcome.csv')
 
 # [TODO] Join all the dataframes
 # [TODO] Do imputation on the joined dataframe
