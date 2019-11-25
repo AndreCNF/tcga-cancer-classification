@@ -14,10 +14,10 @@
 #     name: python3
 # ---
 
-# # TCGA Data Exploration
+# # TCGA Data Preprocessing
 # ---
 #
-# Exploring the preprocessed TCGA dataset from the Pancancer paper (https://www.ncbi.nlm.nih.gov/pubmed/29625048).
+# Preprocessing the TCGA dataset from the Pancancer paper (https://www.ncbi.nlm.nih.gov/pubmed/29625048).
 #
 # The Cancer Genome Atlas (TCGA), a landmark cancer genomics program, molecularly characterized over 20,000 primary cancer and matched normal samples spanning 33 cancer types. This joint effort between the National Cancer Institute and the National Human Genome Research Institute began in 2006, bringing together researchers from diverse disciplines and multiple institutions.
 
@@ -25,27 +25,15 @@
 # ## Importing the necessary packages
 
 # + {"colab": {}, "colab_type": "code", "id": "G5RrWE9R_Nkl"}
-import dask.dataframe as dd                # Dask to handle big data in dataframes
-from dask.distributed import Client        # Dask scheduler
-import re                                  # re to do regex searches in string data
-import plotly                              # Plotly for interactive and pretty plots
-import plotly.graph_objs as go
-from datetime import datetime              # datetime to use proper date and time formats
 import os                                  # os handles directory/workspace changes
-import numpy as np                         # NumPy to handle numeric and NaN operations
-from tqdm import tqdm_notebook             # tqdm allows to track code execution progress
-import numbers                             # numbers allows to check if data is numeric
-import torch                               # PyTorch to create and apply deep learning models
-from torch.utils.data.sampler import SubsetRandomSampler
+import yaml                                # Save and load YAML files
 # -
 
 # Debugging packages
 import pixiedust                           # Debugging in Jupyter Notebook cells
 
-# +
 # Change to parent directory (presumably "Documents")
 os.chdir("../../..")
-
 # Path to the dataset files
 data_path = 'storage/data/TCGA-Pancancer/'
 rppa_folder = 'original/fcbb373e-28d4-4818-92f3-601ede3da5e1/'
@@ -57,10 +45,6 @@ mirna_folder = 'original/1c6174d9-8ffb-466e-b5ee-07b204c15cf8/'
 cdr_folder = 'original/1b5f413e-a8d1-4d10-92eb-7c4ae739ed81/'
 clnc_fllw_folder = 'original/0fc78496-818b-4896-bd83-52db1f533c5c/'
 abs_anttd_seg_folder = 'original/0f4f5701-7b61-41ae-bda9-2805d1ca9781/'
-
-# Path to the code files
-project_path = 'GitHub/tcga-cancer-classification/'
-# -
 
 import modin.pandas as pd
 import data_utils as du                    # Data science and machine learning relevant methods
@@ -119,7 +103,7 @@ rppa_df.describe().transpose()
 
 # Save the dataframe before normalizing:
 
-rppa_df.to_csv(f'{data_path}cleaned/unnormalized/rppa_modin.csv')
+rppa_df.to_csv(f'{data_path}cleaned/unnormalized/rppa.csv')
 
 # Normalize the data into a new dataframe:
 
@@ -132,7 +116,7 @@ rppa_df_norm.describe().transpose()
 
 # Save the normalized dataframe:
 
-rppa_df_norm.to_csv(f'{data_path}cleaned/normalized/rppa_modin.csv')
+rppa_df_norm.to_csv(f'{data_path}cleaned/normalized/rppa.csv')
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## RNA data
@@ -185,6 +169,8 @@ rna_df_norm.describe().transpose()
 # Save the normalized dataframe:
 
 rna_df_norm.to_csv(f'{data_path}cleaned/normalized/rna.csv')
+
+rna_df_norm.head()
 
 # + {"toc-hr-collapsed": true, "cell_type": "markdown"}
 # ## DNA Methylation
@@ -319,6 +305,8 @@ mirna_df_norm.to_csv(f'{data_path}cleaned/normalized/mirna.csv')
 # This dataframe contains copy-number and copy-ratio related data.
 #
 # Copy number alterations/aberrations (CNAs) are changes in copy number that have arisen in somatic tissue (for example, just in a tumor), copy number variations (CNVs) originated from changes in copy number in germline cells (and are thus in all cells of the organism).
+#
+# The rows correspond to contiguous chunks along the chromosome with the same DNA copy-number. "Chromosome" is the chromosome, can be 1-22, X or Y (see human genome). Start is the physical start location for the segment along said linear chromosome, end is the end coordinate. Num_probes is the number of SNP-array probes falling within the segment (these were used to call copy numbers). Reference: https://www.biostars.org/p/244374/
 # -
 
 # ### Loading the data
@@ -326,17 +314,9 @@ mirna_df_norm.to_csv(f'{data_path}cleaned/normalized/mirna.csv')
 abs_anttd_seg_df = pd.read_csv(f'{data_path}{abs_anttd_seg_folder}TCGA_mastercalls.abs_segtabs.fixed.txt', sep='\t')
 abs_anttd_seg_df.head()
 
-# ### Setting the index
+abs_anttd_seg_df.Sample.nunique()
 
-# Set `sample_id` column to be the index:
-
-abs_anttd_seg_df = abs_anttd_seg_df.set_index('Sample')
-abs_anttd_seg_df.head()
-
-# Fix the index name:
-
-abs_anttd_seg_df = du.data_processing.rename_index(abs_anttd_seg_df, 'sample_id')
-abs_anttd_seg_df.head()
+len(abs_anttd_seg_df)
 
 # ### Checking for missing values
 
@@ -354,9 +334,52 @@ abs_anttd_seg_df.new_solution.value_counts()
 
 # ### Removing unneeded features
 
-# Columns `Start`, `End` and `Num_Probes` don't seem to be relevant in this stationary (not temporal) scenario, without the need for experiment specific information.
+# Columns `Start`, `End`, `Num_Probes` and `Length` don't seem to be relevant as we don't need to know so much detail of each chromosome nor experiment specific information.
 
-abs_anttd_seg_df = abs_anttd_seg_df.drop(columns=['Start', 'End', 'Num_Probes'], axis=1)
+abs_anttd_seg_df = abs_anttd_seg_df.drop(columns=['Start', 'End', 'Num_Probes', 'Length'], axis=1)
+abs_anttd_seg_df.head()
+
+# ### Aggregating sample data
+
+# #### Missing value imputation
+#
+# We can't join rows correctly if there are missing values
+
+# +
+# [TODO] Try interpolating the dataframe, as it can use information from neighboring parts 
+# of the chromosome to do imputation
+# -
+
+# #### Average groupby aggregation
+#
+# Join all the data of each sample's chromosome through an average groupby aggregation:
+
+abs_anttd_seg_df.groupby(['Sample', 'Chromosome']).mean().head(25)
+
+abs_anttd_seg_df.groupby(['Sample', 'Chromosome']).apply(lambda g: g.mean(skipna=True)).head(25)
+
+abs_anttd_seg_df.groupby(['Sample', 'Chromosome']).transform('mean').head(25)
+
+import numpy as np
+
+abs_anttd_seg_df.groupby(['Sample', 'Chromosome']).apply(np.nanmean).head(25)
+
+# #### Dividing chromosome data into different columns
+#
+# Separate each chromosome's information in their own features.
+
+
+
+# ### Setting the index
+
+# Set `sample_id` column to be the index:
+
+abs_anttd_seg_df = abs_anttd_seg_df.set_index('Sample')
+abs_anttd_seg_df.head()
+
+# Fix the index name:
+
+abs_anttd_seg_df = du.data_processing.rename_index(abs_anttd_seg_df, 'sample_id')
 abs_anttd_seg_df.head()
 
 # ### Normalizing data
@@ -633,5 +656,11 @@ cdr_df_norm.describe().transpose()
 
 cdr_df_norm.to_csv(f'{data_path}cleaned/normalized/clinical_outcome.csv')
 
-# [TODO] Join all the dataframes
-# [TODO] Do imputation on the joined dataframe
+# ## Saving enumeration encoding mapping
+#
+# Save the dictionary that maps from the original categories/strings to the new numerical encondings.
+
+stream = open(f'{data_path}cleaned/encod_dict.yaml', 'w')
+yaml.dump(encod_dict, stream, default_flow_style=False)
+
+
