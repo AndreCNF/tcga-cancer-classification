@@ -1,6 +1,6 @@
 from torch.utils.data import Dataset
 
-class Time_Series_Dataset(Dataset):
+class Tabular_Dataset(Dataset):
     def __init__(self, arr, df, label_name=None):
         # Counter that indicates in which column we're in when searching for the label column
         col_num = 0
@@ -11,16 +11,16 @@ class Time_Series_Dataset(Dataset):
                 break
             col_num += 1
         # Column numbers corresponding to the features
-        self.features_columns = list(range(self.label_column)) + list(range(self.label_column + 1, arr.shape[2]))
+        self.features_columns = list(range(self.label_column)) + list(range(self.label_column + 1, arr.shape[1]))
         # Features
-        self.X = arr[:, :, self.features_columns]
+        self.X = arr[:, self.features_columns]
         # Labels
-        self.y = arr[:, :, self.label_column]
+        self.y = arr[:, self.label_column]
 
     def __getitem__(self, item):
-        x_t = self.X[item]
-        y_t = self.y[item]
-        return x_t, y_t
+        x_i = self.X[item]
+        y_i = self.y[item]
+        return x_i, y_i
 
     def __len__(self):
         return len(self.X)

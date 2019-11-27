@@ -63,7 +63,7 @@ class MLP(nn.Module):
             self.n_hidden = [self.n_hidden]
         if isinstance(self.n_hidden, list):
             if len(self.n_hidden) != (self.n_layers - 1):
-                raise Exception(f'ERROR: The list of hidden units `n_hidden` isn\'t in accordance with the number of layers `n_layers`, which should follow the rule n_hidden = n_layers - 1. The provided `n_hidden` has length {len(self.n_hidden)} while `n_layers` has length {self.n_layers}.')
+                raise Exception(f'ERROR: The list of hidden units `n_hidden` isn\'t in accordance with the number of layers `n_layers`, which should follow the rule len(n_hidden) = n_layers - 1. The provided `n_hidden` has length {len(self.n_hidden)} while `n_layers` has length {self.n_layers}.')
             # Create a modules list of linear layers
             self.linear_layers = nn.ModuleList()
             # Add the first layer
@@ -72,7 +72,10 @@ class MLP(nn.Module):
                 # Add hidden layers
                 self.linear_layers.append(nn.Linear(self.n_hidden[i], self.n_hidden[i+1]))
             # Add the last layer, which calculates the final output scores
-            self.linear_layers.append(nn.Linear(self.n_hidden[i+1], self.n_outputs))
+            if len(self.n_hidden) == 1:
+                self.linear_layers.append(nn.Linear(self.n_hidden[0], self.n_outputs))
+            else:
+                self.linear_layers.append(nn.Linear(self.n_hidden[i+1], self.n_outputs))
         else:
             raise Exception(f'ERROR: The `id_columns` argument must be specified as either a single integer or a list of integers. Received input with type {type(n_hidden)}.')
         # Dropout used between the hidden layers
@@ -88,7 +91,7 @@ class MLP(nn.Module):
             # categorical encoded columns
             x = embedding.embedding_bag_pipeline(x, self.embed_layers, self.embed_features,
                                                  model_forward=True, inplace=True)
-        for i in range(len(self.n_layers)):
+        for i in range(self.n_layers):
             # Apply the current layer
             x = self.linear_layers[i](x)
             if i < self.n_layers - 1:
@@ -102,6 +105,9 @@ class MLP(nn.Module):
         return output
 
     def loss(self, y_pred, y_labels):
+        # [TODO] Consider replacing all of this with a standard loss function, like CrossEntropyLoss or
+        # NLLLoss; they could be more efficient and elegant, but I wouldn't be able to get the output
+        # probabilities directly
         # Flatten all the labels and make it have type long instead of float
         y_labels = y_labels.contiguous().view(-1).long()
         # Flatten all predictions
@@ -114,6 +120,8 @@ class MLP(nn.Module):
             y_pred = torch.stack([y_pred_other_class, y_pred]).permute(1, 0, 2).squeeze()
         # Pick the values for the label and zero out the rest with the mask
         y_pred = y_pred[range(y_pred.shape[0]), y_labels]
+        # Number of samples
+        n_samples = y_pred.shape[0]
         # Compute cross entropy loss which ignores all padding values
-        ce_loss = -torch.sum(torch.log(y_pred)) / n_pred
+        ce_loss = -torch.sum(torch.log(y_pred)) / n_samples
         return ce_loss
