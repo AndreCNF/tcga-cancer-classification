@@ -35,13 +35,16 @@ class MLP(nn.Module):
                 # Create a modules dictionary of embedding bag layers;
                 # each key corresponds to a embedded feature's index
                 self.embed_layers = nn.ModuleDict()
+                if self.embedding_dim is None:
+                    self.embedding_dim = []
                 for i in range(len(self.embed_features)):
-                    if embedding_dim is None:
+                    if self.embedding_dim is None:
                         # Calculate a reasonable embedding dimension for the current feature;
                         # the formula sets a minimum embedding dimension of 3, with above
                         # values being calculated as the rounded up base 5 logarithm of
                         # the number of embeddings
                         embedding_dim_i = max(3, int(math.ceil(math.log(self.num_embeddings[i], base=5))))
+                        self.embedding_dim.append(embedding_dim_i)
                     else:
                         if isinstance(self.embedding_dim, int):
                             # Make sure that the embedding_dim is a list
@@ -67,7 +70,7 @@ class MLP(nn.Module):
             # Create a modules list of linear layers
             self.linear_layers = nn.ModuleList()
             # Add the first layer
-            self.linear_layers.append(nn.Linear(self.n_inputs, self.n_hidden[0]))
+            self.linear_layers.append(nn.Linear(self.mlp_n_inputs, self.n_hidden[0]))
             for i in range(len(self.n_hidden)-1):
                 # Add hidden layers
                 self.linear_layers.append(nn.Linear(self.n_hidden[i], self.n_hidden[i+1]))
@@ -90,7 +93,9 @@ class MLP(nn.Module):
             # resulting embedding values to the tensor and removing the original,
             # categorical encoded columns
             x = embedding.embedding_bag_pipeline(x, self.embed_layers, self.embed_features,
-                                                 model_forward=True, inplace=True)
+                                                 model_forward=True, n_id_cols=1, inplace=True)
+            # Make the data have type float instead of double, as it would cause problems
+            x = x.float()
         for i in range(self.n_layers):
             # Apply the current layer
             x = self.linear_layers[i](x)
