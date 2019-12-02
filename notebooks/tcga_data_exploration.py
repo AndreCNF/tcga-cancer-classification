@@ -2,16 +2,17 @@
 # ---
 # jupyter:
 #   jupytext:
+#     cell_metadata_json: true
 #     formats: ipynb,py:light
 #     text_representation:
 #       extension: .py
 #       format_name: light
-#       format_version: '1.4'
-#       jupytext_version: 1.2.1
+#       format_version: '1.5'
+#       jupytext_version: 1.3.0
 #   kernelspec:
-#     display_name: tcga-cancer-classification
+#     display_name: Python 3
 #     language: python
-#     name: tcga-cancer-classification
+#     name: python3
 # ---
 
 # # TCGA Data Exploration
@@ -21,7 +22,7 @@
 #
 # The Cancer Genome Atlas (TCGA), a landmark cancer genomics program, molecularly characterized over 20,000 primary cancer and matched normal samples spanning 33 cancer types. This joint effort between the National Cancer Institute and the National Human Genome Research Institute began in 2006, bringing together researchers from diverse disciplines and multiple institutions.
 
-# + {"colab_type": "text", "id": "KOdmFzXqF7nq", "cell_type": "markdown"}
+# + [markdown] {"colab_type": "text", "id": "KOdmFzXqF7nq"}
 # ## Importing the necessary packages
 
 # + {"colab": {}, "colab_type": "code", "id": "G5RrWE9R_Nkl"}
@@ -38,7 +39,7 @@ from tqdm import tqdm_notebook             # tqdm allows to track code execution
 import numbers                             # numbers allows to check if data is numeric
 import torch                               # PyTorch to create and apply deep learning models
 from torch.utils.data.sampler import SubsetRandomSampler
-import utils                               # Contains auxiliary functions
+import data_utils as du                    # Data science and machine learning relevant methods
 # -
 
 # Allow pandas to show more columns:
@@ -48,23 +49,14 @@ pd.set_option('display.max_rows', 1000)
 
 # Set the random seed for reproducibility:
 
-utils.set_random_seed(0)
-
-# Import the remaining custom packages:
-
-import search_explore                      # Methods to search and explore data
-import data_processing                     # Data processing and dataframe operations
-import embedding                           # Embedding and encoding related methods
-# import padding                             # Padding and variable sequence length related methods
-# import machine_learning                    # Common and generic machine learning related methods
-# import deep_learning                       # Common and generic deep learning related methods
+du.set_random_seed(42)
 
 # Debugging packages
 import pixiedust                           # Debugging in Jupyter Notebook cells
 
 # +
 # Change to parent directory (presumably "Documents")
-os.chdir("../..")
+os.chdir("../../..")
 
 # Path to the dataset files
 data_path = 'storage/data/TCGA-Pancancer/'
@@ -86,26 +78,17 @@ project_path = 'GitHub/tcga-cancer-classification/'
 client = Client()
 client
 
-# Upload the custom methods files, so that the Dask cluster has access to relevant auxiliary functions
-client.upload_file(f'{project_path}NeuralNetwork.py')
-client.upload_file(f'{project_path}search_explore.py')
-client.upload_file(f'{project_path}data_processing.py')
-client.upload_file(f'{project_path}embedding.py')
-# client.upload_file(f'{project_path}padding.py')
-# client.upload_file(f'{project_path}machine_learning.py')
-# client.upload_file(f'{project_path}deep_learning.py')
-
-# + {"colab_type": "text", "id": "bEqFkmlYCGOz", "cell_type": "markdown"}
+# + [markdown] {"colab_type": "text", "id": "bEqFkmlYCGOz"}
 # **Important:** Use the following two lines to be able to do plotly plots offline:
 
 # + {"colab": {}, "colab_type": "code", "id": "fZCUmUOzCPeI"}
 import plotly.offline as py
 plotly.offline.init_notebook_mode(connected=True)
 
-# + {"toc-hr-collapsed": false, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": false}
 # ## Exploring the preprocessed dataset
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ### RPPA data
 #
 # Reverse phase protein array (RPPA) is a high-throughput antibody-based technique with the procedures similar to that of Western blots. Proteins are extracted from tumor tissue or cultured cells, denatured by SDS , printed on nitrocellulose-coated slides followed by antibody probe. Our RPPA platform currently allows for the analysis of >1000 samples using at least 130 different antibodies.
@@ -132,18 +115,18 @@ rppa_df.dtypes
 
 rppa_df.compute().nunique()
 
-search_explore.dataframe_missing_values(rppa_df)
+du.search_explore.dataframe_missing_values(rppa_df)
 
 # Out of all the 200 columns, only 9 of them have missing values, with 8 having more than 49% (`ARID1A`, `ADAR1`, `ALPHACATENIN`, `TTF1`, `PARP1`, `JAB1`, `CASPASE9`, `CASPASE3`).
 
-rppa_df = data_processing.standardize_missing_values_df(rppa_df)
+rppa_df = du.data_processing.standardize_missing_values_df(rppa_df)
 rppa_df.head()
 
-search_explore.dataframe_missing_values(rppa_df)
+du.search_explore.dataframe_missing_values(rppa_df)
 
 # In this dataset, all missing values were already well represented. We can see this as the missing values percentages didn't change after applying the `standardize_missing_values_df` method.
 
-rppa_df.describe().transpose()
+rppa_df.describe().compute().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
@@ -160,7 +143,7 @@ py.iplot(fig)
 
 # This RPPA data has a **very small sample size**, specially considering how big the whole GDC/TCGA dataset really is. Furthermore, **it's significantly unbalenced**, with the most represented tumor type (BRCA) having 892 samples while the least represented tumor type (UVM) has only 12.
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ### RNA data
 #
 # Description
@@ -192,16 +175,16 @@ rna_df.dtypes
 
 rna_df.compute().nunique()
 
-search_explore.dataframe_missing_values(rna_df)
+du.search_explore.dataframe_missing_values(rna_df)
 
 # No gene has more than 16% missing values.
 
 # +
-# rna_df = data_processing.standardize_missing_values_df(rna_df)
+# rna_df = du.data_processing.standardize_missing_values_df(rna_df)
 # rna_df.head()
 
 # +
-# search_explore.dataframe_missing_values(rna_df)
+# du.search_explore.dataframe_missing_values(rna_df)
 # -
 
 # The missing values standardization process with take around 30 hours to complete (on Paperspace's C7 machine)! Still, it seems like this table has the right missing values representation, so we don't need to run these last two cells.
@@ -210,7 +193,7 @@ rna_df.describe().compute().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ### DNA Methylation data
 #
 # Description
@@ -247,16 +230,16 @@ dna_mthltn_df.dtypes
 
 dna_mthltn_df.compute().nunique()
 
-search_explore.dataframe_missing_values(dna_mthltn_df)
+du.search_explore.dataframe_missing_values(dna_mthltn_df)
 
 # The DNA composite with the most missing values only has less than 35% missingness.
 
 # +
-# dna_mthltn_df = data_processing.standardize_missing_values_df(dna_mthltn_df)
+# dna_mthltn_df = du.data_processing.standardize_missing_values_df(dna_mthltn_df)
 # dna_mthltn_df.head()
 
 # +
-# search_explore.dataframe_missing_values(dna_mthltn_df)
+# du.search_explore.dataframe_missing_values(dna_mthltn_df)
 # -
 
 # The missing values standardization process with take around 30 hours to complete (on Paperspace's C7 machine)! Still, it seems like this table has the right missing values representation, so we don't need to run these last two cells.
@@ -265,7 +248,7 @@ dna_mthltn_df.describe().compute().transpose()
 
 #
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ### miRNA data
 #
 # Description
@@ -304,14 +287,14 @@ mirna_df.dtypes
 
 mirna_df.compute().nunique()
 
-search_explore.dataframe_missing_values(mirna_df)
+du.search_explore.dataframe_missing_values(mirna_df)
 
 # Absolutely no missing values in this dataframe!
 
-mirna_df = data_processing.standardize_missing_values_df(mirna_df)
+mirna_df = du.data_processing.standardize_missing_values_df(mirna_df)
 mirna_df.head()
 
-search_explore.dataframe_missing_values(mirna_df)
+du.search_explore.dataframe_missing_values(mirna_df)
 
 #
 
@@ -319,7 +302,7 @@ mirna_df.describe().compute().transpose()
 
 #
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ### ABSOLUTE-annotated seg data
 #
 # This dataframe contains copy-number and copy-ratio related data.
@@ -348,14 +331,14 @@ abs_anttd_seg_df.dtypes
 
 abs_anttd_seg_df.compute().nunique()
 
-search_explore.dataframe_missing_values(abs_anttd_seg_df)
+du.search_explore.dataframe_missing_values(abs_anttd_seg_df)
 
 # Low percentages of missing values, topping at bellow 8%.
 
-abs_anttd_seg_df = data_processing.standardize_missing_values_df(abs_anttd_seg_df)
+abs_anttd_seg_df = du.data_processing.standardize_missing_values_df(abs_anttd_seg_df)
 abs_anttd_seg_df.head()
 
-search_explore.dataframe_missing_values(abs_anttd_seg_df)
+du.search_explore.dataframe_missing_values(abs_anttd_seg_df)
 
 # In this dataset, all missing values were already well represented. We can see this as the missing values percentages didn't change after applying the `standardize_missing_values_df` method.
 
@@ -367,7 +350,7 @@ abs_anttd_seg_df.solution.value_counts().compute()
 
 # Columns `Start`, `End` and `Num_Probes` don't seem to be relevant in this stationary (not temporal) scenario, without the need for experiment specific information.
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ### ABSOLUTE purity/ploidy data
 #
 # Description
@@ -394,14 +377,14 @@ abs_anttd_pur_df.dtypes
 
 abs_anttd_pur_df.compute().nunique()
 
-search_explore.dataframe_missing_values(abs_anttd_pur_df)
+du.search_explore.dataframe_missing_values(abs_anttd_pur_df)
 
 # Low percentages of missing values, topping at bellow 9%.
 
-abs_anttd_pur_df = data_processing.standardize_missing_values_df(abs_anttd_pur_df)
+abs_anttd_pur_df = du.data_processing.standardize_missing_values_df(abs_anttd_pur_df)
 abs_anttd_pur_df.head()
 
-search_explore.dataframe_missing_values(abs_anttd_pur_df)
+du.search_explore.dataframe_missing_values(abs_anttd_pur_df)
 
 # In this dataset, all missing values were already well represented. We can see this as the missing values percentages didn't change after applying the `standardize_missing_values_df` method.
 
@@ -413,7 +396,7 @@ abs_anttd_pur_df['call status'].value_counts().compute()
 
 # Not sure what this `call status` column represents.
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ### Mutations data
 #
 # Description
@@ -448,14 +431,14 @@ mut_df.dtypes
 
 mut_df.compute().nunique()
 
-search_explore.dataframe_missing_values(mut_df)
+du.search_explore.dataframe_missing_values(mut_df)
 
 #
 
-mut_df = data_processing.standardize_missing_values_df(mut_df)
+mut_df = du.data_processing.standardize_missing_values_df(mut_df)
 mut_df.head()
 
-search_explore.dataframe_missing_values(mut_df)
+du.search_explore.dataframe_missing_values(mut_df)
 
 #
 
@@ -463,7 +446,7 @@ mut_df.describe().compute().transpose()
 
 #
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ### Clinical outcome (TCGA-CDR) data
 #
 # Description
@@ -495,7 +478,7 @@ cdr_df.dtypes
 
 cdr_df.compute().nunique()
 
-search_explore.dataframe_missing_values(cdr_df)
+du.search_explore.dataframe_missing_values(cdr_df)
 
 # Most of the features with significant quantities of missing values (>40%) are not going to be used. But it's important to remember that categorical features like `clinical_stage` use different representations for missing values.
 
@@ -509,10 +492,10 @@ cdr_df.clinical_stage.value_counts().compute()
 
 # Considerable percentage of missing values on `ajcc_pathologic_tumor_stage` (\~37%) and `clinical_stage` (\~76%).
 
-cdr_df = data_processing.standardize_missing_values_df(cdr_df)
+cdr_df = du.data_processing.standardize_missing_values_df(cdr_df)
 cdr_df.head()
 
-search_explore.dataframe_missing_values(cdr_df)
+du.search_explore.dataframe_missing_values(cdr_df)
 
 # Considering the real percentages of missing values, which are higher than what we got before standardizing the missing values representation, the main features to use from this table should be `gender`, `vital_status`, `age_at_initial_pathologic_diagnosis`, `tumor_status`, `race` and `ajcc_pathologic_tumor_stage`.
 
@@ -545,7 +528,7 @@ py.iplot(fig)
 
 # As expected, this table has similar tumor type representation as the RPPA table, although it has more samples.
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ### Clinical with follow-up data
 #
 # Description
@@ -577,7 +560,7 @@ clnc_fllw_df.dtypes
 
 clnc_fllw_df.compute().nunique()
 
-search_explore.dataframe_missing_values(clnc_fllw_df)
+du.search_explore.dataframe_missing_values(clnc_fllw_df)
 
 # The vast majority of the features are basically all filled with missing values (>80%). Despite features like `weight`, `height`, `molecular_abnormality_results`, `number_pack_years_smoked` and `tobacco_smoking_history` having less missing values and being potentially interesting, we still need to check what happens if we standardize the missing values representation, as the previous function only detects missing values when they're represented as NumPy's NaN value.
 
@@ -591,10 +574,10 @@ clnc_fllw_df.number_pack_years_smoked.value_counts().compute()
 
 clnc_fllw_df.tobacco_smoking_history.value_counts().compute()
 
-clnc_fllw_df = data_processing.standardize_missing_values_df(clnc_fllw_df)
+clnc_fllw_df = du.data_processing.standardize_missing_values_df(clnc_fllw_df)
 clnc_fllw_df.head()
 
-search_explore.dataframe_missing_values(clnc_fllw_df)
+du.search_explore.dataframe_missing_values(clnc_fllw_df)
 
 # We can notice a general increase in the percentages of missing values, including on the features that we were interested on, namely `weight`, `height`, `molecular_abnormality_results`, `number_pack_years_smoked` and `tobacco_smoking_history`. Considering that they all have more than 70% missing values, they're likely of no use for us.
 

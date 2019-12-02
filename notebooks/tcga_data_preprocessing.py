@@ -2,12 +2,13 @@
 # ---
 # jupyter:
 #   jupytext:
+#     cell_metadata_json: true
 #     formats: ipynb,py:light
 #     text_representation:
 #       extension: .py
 #       format_name: light
-#       format_version: '1.4'
-#       jupytext_version: 1.2.3
+#       format_version: '1.5'
+#       jupytext_version: 1.3.0
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -21,12 +22,14 @@
 #
 # The Cancer Genome Atlas (TCGA), a landmark cancer genomics program, molecularly characterized over 20,000 primary cancer and matched normal samples spanning 33 cancer types. This joint effort between the National Cancer Institute and the National Human Genome Research Institute began in 2006, bringing together researchers from diverse disciplines and multiple institutions.
 
-# + {"colab_type": "text", "id": "KOdmFzXqF7nq", "toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"colab_type": "text", "id": "KOdmFzXqF7nq", "toc-hr-collapsed": true}
 # ## Importing the necessary packages
 
 # + {"colab": {}, "colab_type": "code", "id": "G5RrWE9R_Nkl"}
 import os                                  # os handles directory/workspace changes
 import yaml                                # Save and load YAML files
+import numpy as np                         # NumPy to handle numeric and NaN operations
+from functools import reduce               # Parallelize functions
 # -
 
 # Debugging packages
@@ -35,7 +38,7 @@ import pixiedust                           # Debugging in Jupyter Notebook cells
 # Change to parent directory (presumably "Documents")
 os.chdir("../../..")
 # Path to the dataset files
-data_path = 'storage/data/TCGA-Pancancer/'
+data_path = 'data/TCGA-Pancancer/'
 rppa_folder = 'original/fcbb373e-28d4-4818-92f3-601ede3da5e1/'
 dna_mthltn_folder = 'original/d82e2c44-89eb-43d9-b6d3-712732bf6a53/'
 abs_anttd_pur_folder = 'original/4f277128-f793-4354-a13d-30cc7fe9f6b5/'
@@ -58,7 +61,7 @@ pd.set_option('display.max_rows', 1000)
 
 du.set_random_seed(42)
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ## RPPA data
 #
 # Reverse phase protein array (RPPA) is a high-throughput antibody-based technique with the procedures similar to that of Western blots. Proteins are extracted from tumor tissue or cultured cells, denatured by SDS , printed on nitrocellulose-coated slides followed by antibody probe. Our RPPA platform currently allows for the analysis of >1000 samples using at least 130 different antibodies.
@@ -118,7 +121,7 @@ rppa_df_norm.describe().transpose()
 
 rppa_df_norm.to_csv(f'{data_path}cleaned/normalized/rppa.csv')
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ## RNA data
 #
 # Description
@@ -172,7 +175,7 @@ rna_df_norm.to_csv(f'{data_path}cleaned/normalized/rna.csv')
 
 rna_df_norm.head()
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ## DNA Methylation
 #
 # Description
@@ -232,7 +235,7 @@ dna_mthltn_df_norm.describe().transpose()
 
 dna_mthltn_df_norm.to_csv(f'{data_path}cleaned/normalized/dna_methylation.csv')
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ## miRNA data
 #
 # Description
@@ -299,7 +302,7 @@ mirna_df_norm.describe().transpose()
 
 mirna_df_norm.to_csv(f'{data_path}cleaned/normalized/mirna.csv')
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": false}
 # ## ABSOLUTE-annotated seg data
 #
 # This dataframe contains copy-number and copy-ratio related data.
@@ -339,36 +342,90 @@ abs_anttd_seg_df.new_solution.value_counts()
 abs_anttd_seg_df = abs_anttd_seg_df.drop(columns=['Start', 'End', 'Num_Probes', 'Length'], axis=1)
 abs_anttd_seg_df.head()
 
+# ### Normalizing data
+
+abs_anttd_seg_df.describe().transpose()
+
+# The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
+
+# Save the dataframe before normalizing:
+
+abs_anttd_seg_df.to_csv(f'{data_path}cleaned/unnormalized/copy_number_ratio.csv')
+
+# Normalize the data into a new dataframe:
+
+abs_anttd_seg_df_norm = du.data_processing.normalize_data(abs_anttd_seg_df, id_columns=None, categ_columns='Chromosome')
+abs_anttd_seg_df_norm.head()
+
+# Confirm that everything is ok through the `describe` method:
+
+abs_anttd_seg_df_norm.describe().transpose()
+
+# + [markdown] {"toc-hr-collapsed": false}
 # ### Aggregating sample data
+# -
 
 # #### Missing value imputation
 #
 # We can't join rows correctly if there are missing values
 
-# +
-# [TODO] Try interpolating the dataframe, as it can use information from neighboring parts 
-# of the chromosome to do imputation
-# -
+nan_idx = abs_anttd_seg_df[abs_anttd_seg_df.Ccf_ci95_high_a2.isnull()].index
+nan_idx
+
+abs_anttd_seg_df.iloc[nan_idx].head()
+
+abs_anttd_seg_df.head(125).tail(25)
+
+abs_anttd_seg_df = du.data_processing.missing_values_imputation(abs_anttd_seg_df, method='interpolation',
+                                                                id_column='Sample', inplace=True)
+abs_anttd_seg_df.head()
+
+du.search_explore.dataframe_missing_values(abs_anttd_seg_df)
+
+abs_anttd_seg_df.head(125).tail(25)
 
 # #### Average groupby aggregation
 #
 # Join all the data of each sample's chromosome through an average groupby aggregation:
 
-abs_anttd_seg_df.groupby(['Sample', 'Chromosome']).mean().head(25)
-
-abs_anttd_seg_df.groupby(['Sample', 'Chromosome']).apply(lambda g: g.mean(skipna=True)).head(25)
-
-abs_anttd_seg_df.groupby(['Sample', 'Chromosome']).transform('mean').head(25)
-
-import numpy as np
-
-abs_anttd_seg_df.groupby(['Sample', 'Chromosome']).apply(np.nanmean).head(25)
+abs_anttd_seg_df = abs_anttd_seg_df.groupby(['Sample', 'Chromosome']).mean()
+abs_anttd_seg_df.head(25)
 
 # #### Dividing chromosome data into different columns
 #
-# Separate each chromosome's information in their own features.
+# Separate each chromosome's information into their own features.
+#
+# OR
+#
+# Create lists for each feature, containing each chromosome's value, and then apply an embedding bag on it.
 
+abs_anttd_seg_df[abs_anttd_seg_df.index.get_level_values('Chromosome') == 1].head()
 
+# List that will contain multiple dataframes, one for each chromosome
+df_list = []
+# Go through each chromosome and create its own dataframe, with properly labeled columns
+for chrom in range(1, 23):
+    # Filter for the current chromosome's dataframe
+    tmp_df = abs_anttd_seg_df[abs_anttd_seg_df.index.get_level_values('Chromosome') == chrom]
+    # Change the column names to identify the chromosome
+    tmp_df.columns = [f'{col}_chromosome_{chrom}' for col in tmp_df.columns]
+    # Remove now redundant `Chromosome` column
+    tmp_df = tmp_df.reset_index().drop(columns='Chromosome', axis=1)
+    # Add to the dataframes list
+    df_list.append(tmp_df)
+
+df_list[3]
+
+abs_anttd_seg_df = reduce(lambda x, y: pd.merge(x, y, on='Sample'), df_list)
+abs_anttd_seg_df.head()
+
+abs_anttd_seg_df.Sample.nunique()
+
+len(abs_anttd_seg_df)
+
+# +
+# [TODO] See if there are duplicate columns; I suspect that at least some binary columns, like new_solution, are the same for every chromosome
+# -
 
 # ### Setting the index
 
@@ -382,32 +439,11 @@ abs_anttd_seg_df.head()
 abs_anttd_seg_df = du.data_processing.rename_index(abs_anttd_seg_df, 'sample_id')
 abs_anttd_seg_df.head()
 
-# ### Normalizing data
-#
-# [TODO] Consider setting 23 as the 0 (mean) value of the `Chromosome` feature, as that's the normal value for human cells.
-
-abs_anttd_seg_df.describe().transpose()
-
-# The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
-
-# Save the dataframe before normalizing:
-
-abs_anttd_seg_df.to_csv(f'{data_path}cleaned/unnormalized/copy_number_ratio.csv')
-
-# Normalize the data into a new dataframe:
-
-abs_anttd_seg_df_norm = du.data_processing.normalize_data(abs_anttd_seg_df, id_columns=None)
-abs_anttd_seg_df_norm.head()
-
-# Confirm that everything is ok through the `describe` method:
-
-abs_anttd_seg_df_norm.describe().transpose()
-
 # Save the normalized dataframe:
 
 abs_anttd_seg_df_norm.to_csv(f'{data_path}cleaned/normalized/copy_number_ratio.csv')
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ## ABSOLUTE purity/ploidy data
 #
 # Description
@@ -480,7 +516,7 @@ abs_anttd_pur_df_norm.describe().transpose()
 
 abs_anttd_pur_df_norm.to_csv(f'{data_path}cleaned/normalized/purity_ploidy.csv')
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ## Mutations data
 #
 # Description
@@ -551,7 +587,7 @@ mut_df_norm.describe().transpose()
 
 mut_df_norm.to_csv(f'{data_path}cleaned/normalized/mutation.csv')
 
-# + {"toc-hr-collapsed": true, "cell_type": "markdown"}
+# + [markdown] {"toc-hr-collapsed": true}
 # ## Clinical outcome (TCGA-CDR) data
 #
 # Description
