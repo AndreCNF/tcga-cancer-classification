@@ -26,9 +26,7 @@
 # ## Importing the necessary packages
 
 # + {"colab": {}, "colab_type": "code", "id": "G5RrWE9R_Nkl"}
-import dask.dataframe as dd                # Dask to handle big data in dataframes
-import pandas as pd                        # Pandas to handle the data in dataframes
-from dask.distributed import Client        # Dask scheduler
+import modin.pandas as pd                  # Optimized distributed version of Pandas
 import re                                  # re to do regex searches in string data
 import plotly                              # Plotly for interactive and pretty plots
 import plotly.graph_objs as go
@@ -59,7 +57,7 @@ import pixiedust                           # Debugging in Jupyter Notebook cells
 os.chdir("../../..")
 
 # Path to the dataset files
-data_path = 'storage/data/TCGA-Pancancer/'
+data_path = 'data/TCGA-Pancancer/original/'
 rppa_folder = 'fcbb373e-28d4-4818-92f3-601ede3da5e1/'
 dna_mthltn_folder = 'd82e2c44-89eb-43d9-b6d3-712732bf6a53/'
 abs_anttd_pur_folder = '4f277128-f793-4354-a13d-30cc7fe9f6b5/'
@@ -71,12 +69,7 @@ clnc_fllw_folder = '0fc78496-818b-4896-bd83-52db1f533c5c/'
 abs_anttd_seg_folder = '0f4f5701-7b61-41ae-bda9-2805d1ca9781/'
 
 # Path to the code files
-project_path = 'GitHub/tcga-cancer-classification/'
-# -
-
-# Set up local cluster
-client = Client()
-client
+project_path = 'code/tcga-cancer-classification/'
 
 # + [markdown] {"colab_type": "text", "id": "bEqFkmlYCGOz"}
 # **Important:** Use the following two lines to be able to do plotly plots offline:
@@ -95,25 +88,13 @@ plotly.offline.init_notebook_mode(connected=True)
 # -
 
 rppa_df = pd.read_csv(f'{data_path}{rppa_folder}TCGA-RPPA-pancan-clean.csv')
-# rppa_df = pd.read_csv(f'{data_path}TCGA-RPPA-pancan-clean.csv')
-rppa_df.head()
-
-# +
-# For some reason Dask is failing to read the CSV file directly (failed to serialize)
-# rppa_df = dd.read_csv(f'{data_path}{file1_folder}TCGA-RPPA-pancan-clean.csv')
-# rppa_df.head()
-# -
-
-# Convert to dask for distributed computing:
-
-rppa_df = dd.from_pandas(rppa_df, npartitions=30)
 rppa_df.head()
 
 # #### Basic stats
 
 rppa_df.dtypes
 
-rppa_df.compute().nunique()
+rppa_df.nunique()
 
 du.search_explore.dataframe_missing_values(rppa_df)
 
@@ -126,7 +107,7 @@ du.search_explore.dataframe_missing_values(rppa_df)
 
 # In this dataset, all missing values were already well represented. We can see this as the missing values percentages didn't change after applying the `standardize_missing_values_df` method.
 
-rppa_df.describe().compute().transpose()
+rppa_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
@@ -150,30 +131,18 @@ py.iplot(fig)
 # -
 
 rna_df = pd.read_csv(f'{data_path}{rna_folder}EBPlusPlusAdjustPANCAN_IlluminaHiSeq_RNASeqV2.geneExp.tsv', sep='\t')
-# rna_df = pd.read_csv(f'{data_path}EBPlusPlusAdjustPANCAN_IlluminaHiSeq_RNASeqV2.geneExp.tsv', sep='\t')
 rna_df.head()
-
-# +
-# For some reason Dask is failing to read the TSV file directly (failed to serialize)
-# rna_df = dd.read_csv(f'{data_path}{rna_folder}EBPlusPlusAdjustPANCAN_IlluminaHiSeq_RNASeqV2.geneExp.tsv', sep='\t', sample=1000000)
-# rna_df.head()
-# -
 
 # This dataframe is inverted, i.e. the columns should switch with the rows.
 
 rna_df = rna_df.set_index('gene_id').transpose()
 rna_df.head()
 
-# Convert to dask for distributed computing:
-
-rna_df = dd.from_pandas(rna_df, npartitions=30)
-rna_df.head()
-
 # #### Basic stats
 
 rna_df.dtypes
 
-rna_df.compute().nunique()
+rna_df.nunique()
 
 du.search_explore.dataframe_missing_values(rna_df)
 
@@ -189,7 +158,7 @@ du.search_explore.dataframe_missing_values(rna_df)
 
 # The missing values standardization process with take around 30 hours to complete (on Paperspace's C7 machine)! Still, it seems like this table has the right missing values representation, so we don't need to run these last two cells.
 
-rna_df.describe().compute().transpose()
+rna_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
@@ -200,14 +169,7 @@ rna_df.describe().compute().transpose()
 # -
 
 dna_mthltn_df = pd.read_csv(f'{data_path}{dna_mthltn_folder}jhu-usc.edu_PANCAN_merged_HumanMethylation27_HumanMethylation450.betaValue_whitelisted.tsv', sep='\t')
-# dna_mthltn_df = pd.read_csv(f'{data_path}jhu-usc.edu_PANCAN_merged_HumanMethylation27_HumanMethylation450.betaValue_whitelisted.tsv', sep='\t')
 dna_mthltn_df.head()
-
-# +
-# For some reason Dask is failing to read the CSV file directly (failed to serialize)
-# dna_mthltn_df = dd.read_csv(f'{data_path}{file1_folder}jhu-usc.edu_PANCAN_merged_HumanMethylation27_HumanMethylation450.betaValue_whitelisted.tsv', sep='\t')
-# dna_mthltn_df.head()
-# -
 
 # This dataframe is inverted, i.e. the columns should switch with the rows.
 
@@ -219,16 +181,11 @@ dna_mthltn_df.head()
 dna_mthltn_df.index.rename('sample_id', inplace=True)
 dna_mthltn_df.head()
 
-# Convert to dask for distributed computing:
-
-dna_mthltn_df = dd.from_pandas(dna_mthltn_df, npartitions=30)
-dna_mthltn_df.head()
-
 # #### Basic stats
 
 dna_mthltn_df.dtypes
 
-dna_mthltn_df.compute().nunique()
+dna_mthltn_df.nunique()
 
 du.search_explore.dataframe_missing_values(dna_mthltn_df)
 
@@ -244,7 +201,7 @@ du.search_explore.dataframe_missing_values(dna_mthltn_df)
 
 # The missing values standardization process with take around 30 hours to complete (on Paperspace's C7 machine)! Still, it seems like this table has the right missing values representation, so we don't need to run these last two cells.
 
-dna_mthltn_df.describe().compute().transpose()
+dna_mthltn_df.describe().transpose()
 
 #
 
@@ -255,14 +212,7 @@ dna_mthltn_df.describe().compute().transpose()
 # -
 
 mirna_df = pd.read_csv(f'{data_path}{mirna_folder}pancanMiRs_EBadjOnProtocolPlatformWithoutRepsWithUnCorrectMiRs_08_04_16.csv')
-# mirna_df = pd.read_csv(f'{data_path}pancanMiRs_EBadjOnProtocolPlatformWithoutRepsWithUnCorrectMiRs_08_04_16.csv')
 mirna_df.head()
-
-# +
-# For some reason Dask is failing to read the CSV file directly (failed to serialize)
-# mirna_df = dd.read_csv(f'{data_path}{file1_folder}pancanMiRs_EBadjOnProtocolPlatformWithoutRepsWithUnCorrectMiRs_08_04_16.csv')
-# mirna_df.head()
-# -
 
 mirna_df.Correction.value_counts()
 
@@ -276,16 +226,11 @@ mirna_df.head()
 mirna_df = mirna_df.set_index('Genes').transpose()
 mirna_df.head()
 
-# Convert to dask for distributed computing:
-
-mirna_df = dd.from_pandas(mirna_df, npartitions=30)
-mirna_df.head()
-
 # #### Basic stats
 
 mirna_df.dtypes
 
-mirna_df.compute().nunique()
+mirna_df.nunique()
 
 du.search_explore.dataframe_missing_values(mirna_df)
 
@@ -298,7 +243,7 @@ du.search_explore.dataframe_missing_values(mirna_df)
 
 #
 
-mirna_df.describe().compute().transpose()
+mirna_df.describe().transpose()
 
 #
 
@@ -311,25 +256,13 @@ mirna_df.describe().compute().transpose()
 # -
 
 abs_anttd_seg_df = pd.read_csv(f'{data_path}{abs_anttd_seg_folder}TCGA_mastercalls.abs_segtabs.fixed.txt', sep='\t')
-# abs_anttd_seg_df = pd.read_csv(f'{data_path}TCGA_mastercalls.abs_segtabs.fixed.txt', sep='\t')
-abs_anttd_seg_df.head()
-
-# +
-# For some reason Dask is failing to read the CSV file directly (failed to serialize)
-# abs_anttd_seg_df = dd.read_csv(f'{data_path}{file1_folder}TCGA_mastercalls.abs_segtabs.fixed.txt', sep='\t')
-# abs_anttd_seg_df.head()
-# -
-
-# Convert to dask for distributed computing:
-
-abs_anttd_seg_df = dd.from_pandas(abs_anttd_seg_df, npartitions=30)
 abs_anttd_seg_df.head()
 
 # #### Basic stats
 
 abs_anttd_seg_df.dtypes
 
-abs_anttd_seg_df.compute().nunique()
+abs_anttd_seg_df.nunique()
 
 du.search_explore.dataframe_missing_values(abs_anttd_seg_df)
 
@@ -342,11 +275,11 @@ du.search_explore.dataframe_missing_values(abs_anttd_seg_df)
 
 # In this dataset, all missing values were already well represented. We can see this as the missing values percentages didn't change after applying the `standardize_missing_values_df` method.
 
-abs_anttd_seg_df.describe().compute().transpose()
+abs_anttd_seg_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
-abs_anttd_seg_df.solution.value_counts().compute()
+abs_anttd_seg_df.solution.value_counts()
 
 # Columns `Start`, `End` and `Num_Probes` don't seem to be relevant in this stationary (not temporal) scenario, without the need for experiment specific information.
 
@@ -357,25 +290,13 @@ abs_anttd_seg_df.solution.value_counts().compute()
 # -
 
 abs_anttd_pur_df = pd.read_csv(f'{data_path}{abs_anttd_pur_folder}TCGA_mastercalls.abs_tables_JSedit.fixed.txt', sep='\t')
-# abs_anttd_pur_df = pd.read_csv(f'{data_path}TCGA_mastercalls.abs_tables_JSedit.fixed.txt', sep='\t')
-abs_anttd_pur_df.head()
-
-# +
-# For some reason Dask is failing to read the CSV file directly (failed to serialize)
-# abs_anttd_pur_df = dd.read_csv(f'{data_path}{file1_folder}TCGA_mastercalls.abs_tables_JSedit.fixed.txt', sep='\t')
-# abs_anttd_pur_df.head()
-# -
-
-# Convert to dask for distributed computing:
-
-abs_anttd_pur_df = dd.from_pandas(abs_anttd_pur_df, npartitions=30)
 abs_anttd_pur_df.head()
 
 # #### Basic stats
 
 abs_anttd_pur_df.dtypes
 
-abs_anttd_pur_df.compute().nunique()
+abs_anttd_pur_df.nunique()
 
 du.search_explore.dataframe_missing_values(abs_anttd_pur_df)
 
@@ -388,11 +309,11 @@ du.search_explore.dataframe_missing_values(abs_anttd_pur_df)
 
 # In this dataset, all missing values were already well represented. We can see this as the missing values percentages didn't change after applying the `standardize_missing_values_df` method.
 
-abs_anttd_pur_df.describe().compute().transpose()
+abs_anttd_pur_df.describe().transpose()
 
 # The data is not (well) normalized yet. All columns should have 0 mean and 1 standard deviation.
 
-abs_anttd_pur_df['call status'].value_counts().compute()
+abs_anttd_pur_df['call status'].value_counts()
 
 # Not sure what this `call status` column represents.
 
@@ -408,17 +329,6 @@ mut_df.head()
 
 len(list(mut_df.columns))
 
-# +
-# For some reason Dask is failing to read the CSV file directly (failed to serialize)
-# mut_df = dd.read_csv(f'{data_path}{file1_folder}mc3.v0.2.8.PUBLIC.maf.gz', sep='\t')
-# mut_df.head()
-# -
-
-# Convert to dask for distributed computing:
-
-mut_df = dd.from_pandas(mut_df, npartitions=60)
-mut_df.head()
-
 # **Comments:**
 # * Some columns, such as `all_effects`, `Existing_variation`, `TREMBL` and `DOMAINS` seem to be lists of values, separated by commas (good candidates to use embedding bag).
 # * The sample ID that we can use to match with the other tables appears to be `Tumor_Sample_Barcode`. There's also a similar `Matched_Norm_Sample_Barcode` column, but that seems to belong to another dataset (perhaps GTEx).
@@ -429,7 +339,7 @@ mut_df.head()
 
 mut_df.dtypes
 
-mut_df.compute().nunique()
+mut_df.nunique()
 
 du.search_explore.dataframe_missing_values(mut_df)
 
@@ -442,7 +352,7 @@ du.search_explore.dataframe_missing_values(mut_df)
 
 #
 
-mut_df.describe().compute().transpose()
+mut_df.describe().transpose()
 
 #
 
@@ -453,18 +363,6 @@ mut_df.describe().compute().transpose()
 # -
 
 cdr_df = pd.read_excel(f'{data_path}{cdr_folder}TCGA-CDR-SupplementalTableS1.xlsx')
-# cdr_df = pd.read_excel(f'{data_path}TCGA-CDR-SupplementalTableS1.xlsx')
-cdr_df.head()
-
-# +
-# For some reason Dask is failing to read the excel file directly (failed to serialize)
-# cdr_df = dd.read_excel(f'{data_path}{file1_folder}TCGA-CDR-SupplementalTableS1.xlsx')
-# cdr_df.head()
-# -
-
-# Convert to dask for distributed computing:
-
-cdr_df = dd.from_pandas(cdr_df, npartitions=30)
 cdr_df.head()
 
 # **Comments:**
@@ -476,19 +374,19 @@ cdr_df.head()
 
 cdr_df.dtypes
 
-cdr_df.compute().nunique()
+cdr_df.nunique()
 
 du.search_explore.dataframe_missing_values(cdr_df)
 
 # Most of the features with significant quantities of missing values (>40%) are not going to be used. But it's important to remember that categorical features like `clinical_stage` use different representations for missing values.
 
-cdr_df.vital_status.value_counts().compute()
+cdr_df.vital_status.value_counts()
 
 # Should probably assume the "[Discrepancy]" option as a missing value also.
 
-cdr_df.ajcc_pathologic_tumor_stage.value_counts().compute()
+cdr_df.ajcc_pathologic_tumor_stage.value_counts()
 
-cdr_df.clinical_stage.value_counts().compute()
+cdr_df.clinical_stage.value_counts()
 
 # Considerable percentage of missing values on `ajcc_pathologic_tumor_stage` (\~37%) and `clinical_stage` (\~76%).
 
@@ -499,21 +397,21 @@ du.search_explore.dataframe_missing_values(cdr_df)
 
 # Considering the real percentages of missing values, which are higher than what we got before standardizing the missing values representation, the main features to use from this table should be `gender`, `vital_status`, `age_at_initial_pathologic_diagnosis`, `tumor_status`, `race` and `ajcc_pathologic_tumor_stage`.
 
-cdr_df.ajcc_pathologic_tumor_stage.value_counts().compute()
+cdr_df.ajcc_pathologic_tumor_stage.value_counts()
 
-cdr_df.clinical_stage.value_counts().compute()
+cdr_df.clinical_stage.value_counts()
 
-cdr_df.race.value_counts().compute()
+cdr_df.race.value_counts()
 
-cdr_df.histological_grade.value_counts().compute()
+cdr_df.histological_grade.value_counts()
 
-cdr_df.vital_status.value_counts().compute()
+cdr_df.vital_status.value_counts()
 
-cdr_df.margin_status.value_counts().compute()
+cdr_df.margin_status.value_counts()
 
 # Not sure what `margin_status` represents.
 
-cdr_df.describe().compute().transpose()
+cdr_df.describe().transpose()
 
 # #### Tumor representation
 
@@ -535,18 +433,6 @@ py.iplot(fig)
 # -
 
 clnc_fllw_df = pd.read_csv(f'{data_path}{clnc_fllw_folder}clinical_PANCAN_patient_with_followup.tsv', sep='\t', encoding='ISO-8859-1')
-# clnc_fllw_df = pd.read_csv(f'{data_path}clinical_PANCAN_patient_with_followup.tsv', sep='\t')
-clnc_fllw_df.head()
-
-# +
-# For some reason Dask is failing to read the CSV file directly (failed to serialize)
-# clnc_fllw_df = dd.read_csv(f'{data_path}{file1_folder}clinical_PANCAN_patient_with_followup.tsv', sep='\t')
-# clnc_fllw_df.head()
-# -
-
-# Convert to dask for distributed computing:
-
-clnc_fllw_df = dd.from_pandas(clnc_fllw_df, npartitions=60)
 clnc_fllw_df.head()
 
 list(clnc_fllw_df.columns)
@@ -558,21 +444,21 @@ list(clnc_fllw_df.columns)
 
 clnc_fllw_df.dtypes
 
-clnc_fllw_df.compute().nunique()
+clnc_fllw_df.nunique()
 
 du.search_explore.dataframe_missing_values(clnc_fllw_df)
 
 # The vast majority of the features are basically all filled with missing values (>80%). Despite features like `weight`, `height`, `molecular_abnormality_results`, `number_pack_years_smoked` and `tobacco_smoking_history` having less missing values and being potentially interesting, we still need to check what happens if we standardize the missing values representation, as the previous function only detects missing values when they're represented as NumPy's NaN value.
 
-clnc_fllw_df.weight.value_counts().compute()
+clnc_fllw_df.weight.value_counts()
 
-clnc_fllw_df.height.value_counts().compute()
+clnc_fllw_df.height.value_counts()
 
-clnc_fllw_df.molecular_abnormality_results.value_counts().compute()
+clnc_fllw_df.molecular_abnormality_results.value_counts()
 
-clnc_fllw_df.number_pack_years_smoked.value_counts().compute()
+clnc_fllw_df.number_pack_years_smoked.value_counts()
 
-clnc_fllw_df.tobacco_smoking_history.value_counts().compute()
+clnc_fllw_df.tobacco_smoking_history.value_counts()
 
 clnc_fllw_df = du.data_processing.standardize_missing_values_df(clnc_fllw_df)
 clnc_fllw_df.head()
@@ -581,16 +467,16 @@ du.search_explore.dataframe_missing_values(clnc_fllw_df)
 
 # We can notice a general increase in the percentages of missing values, including on the features that we were interested on, namely `weight`, `height`, `molecular_abnormality_results`, `number_pack_years_smoked` and `tobacco_smoking_history`. Considering that they all have more than 70% missing values, they're likely of no use for us.
 
-clnc_fllw_df.weight.value_counts().compute()
+clnc_fllw_df.weight.value_counts()
 
-clnc_fllw_df.height.value_counts().compute()
+clnc_fllw_df.height.value_counts()
 
-clnc_fllw_df.molecular_abnormality_results.value_counts().compute()
+clnc_fllw_df.molecular_abnormality_results.value_counts()
 
-clnc_fllw_df.number_pack_years_smoked.value_counts().compute()
+clnc_fllw_df.number_pack_years_smoked.value_counts()
 
-clnc_fllw_df.tobacco_smoking_history.value_counts().compute()
+clnc_fllw_df.tobacco_smoking_history.value_counts()
 
-clnc_fllw_df.describe().compute().transpose()
+clnc_fllw_df.describe().transpose()
 
 # Considering that this table is essentially an extension of the TCHA-CDR table, with more features but with all of them having large amounts of missing values (>70%), we're not going to use this table.

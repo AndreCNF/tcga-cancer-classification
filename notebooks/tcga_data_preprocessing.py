@@ -49,7 +49,7 @@ cdr_folder = 'original/1b5f413e-a8d1-4d10-92eb-7c4ae739ed81/'
 clnc_fllw_folder = 'original/0fc78496-818b-4896-bd83-52db1f533c5c/'
 abs_anttd_seg_folder = 'original/0f4f5701-7b61-41ae-bda9-2805d1ca9781/'
 
-import modin.pandas as pd
+import modin.pandas as pd                  # Optimized distributed version of Pandas
 import data_utils as du                    # Data science and machine learning relevant methods
 
 # Allow pandas to show more columns:
@@ -302,7 +302,7 @@ mirna_df_norm.describe().transpose()
 
 mirna_df_norm.to_csv(f'{data_path}cleaned/normalized/mirna.csv')
 
-# + [markdown] {"toc-hr-collapsed": false}
+# + [markdown] {"toc-hr-collapsed": true}
 # ## ABSOLUTE-annotated seg data
 #
 # This dataframe contains copy-number and copy-ratio related data.
@@ -354,14 +354,14 @@ abs_anttd_seg_df.to_csv(f'{data_path}cleaned/unnormalized/copy_number_ratio.csv'
 
 # Normalize the data into a new dataframe:
 
-abs_anttd_seg_df_norm = du.data_processing.normalize_data(abs_anttd_seg_df, id_columns=None, categ_columns='Chromosome')
-abs_anttd_seg_df_norm.head()
+abs_anttd_seg_df = du.data_processing.normalize_data(abs_anttd_seg_df, id_columns=None, categ_columns='Chromosome')
+abs_anttd_seg_df.head()
 
 # Confirm that everything is ok through the `describe` method:
 
-abs_anttd_seg_df_norm.describe().transpose()
+abs_anttd_seg_df.describe().transpose()
 
-# + [markdown] {"toc-hr-collapsed": false}
+# + [markdown] {"toc-hr-collapsed": true}
 # ### Aggregating sample data
 # -
 
@@ -423,9 +423,38 @@ abs_anttd_seg_df.Sample.nunique()
 
 len(abs_anttd_seg_df)
 
-# +
-# [TODO] See if there are duplicate columns; I suspect that at least some binary columns, like new_solution, are the same for every chromosome
-# -
+# Remove duplicate columns (redundant features that are independent of the chromosome):
+
+unique_features = set([col.split('_chromosome')[0] for col in abs_anttd_seg_df.columns])
+unique_features
+
+[col for col in abs_anttd_seg_df.columns if 'Cancer_cell_frac_a1' in col]
+
+# Save the feature names that are redundant (i.e. no difference between chromosomes)
+redundant_features = []
+for feature in du.utils.iterations_loop(unique_features):
+    # Flag that indicates if all of the feature's columns are equal
+    all_cols_equal = True
+    # List of column names that are part of the same unique feature
+    chrom_cols = [col for col in abs_anttd_seg_df.columns if feature in col]
+    for i in du.utils.iterations_loop(range(len(chrom_cols)-1)):
+        # Check if the current pair of columns are completely equal
+        if any(abs_anttd_seg_df[chrom_cols[i]] != abs_anttd_seg_df[chrom_cols[i+1]]):
+            all_cols_equal = False
+            break
+    if all_cols_equal is True:
+        redundant_features.append(feature)
+redundant_features
+
+column_duplicates = [col for col in abs_anttd_seg_df.columns if 'new_solution' in col]
+column_duplicates.remove('new_solution_chromosome_1')
+column_duplicates
+
+abs_anttd_seg_df = abs_anttd_seg_df.drop(columns=column_duplicates, axis=1)
+abs_anttd_seg_df = abs_anttd_seg_df.rename(columns={'new_solution_chromosome_1': 'new_solution'})
+abs_anttd_seg_df.head()
+
+[col for col in abs_anttd_seg_df.columns if 'new_solution' in col]
 
 # ### Setting the index
 
@@ -441,7 +470,7 @@ abs_anttd_seg_df.head()
 
 # Save the normalized dataframe:
 
-abs_anttd_seg_df_norm.to_csv(f'{data_path}cleaned/normalized/copy_number_ratio.csv')
+abs_anttd_seg_df.to_csv(f'{data_path}cleaned/normalized/copy_number_ratio.csv')
 
 # + [markdown] {"toc-hr-collapsed": true}
 # ## ABSOLUTE purity/ploidy data
@@ -632,14 +661,18 @@ cdr_df = du.data_processing.remove_cols_with_many_nans(cdr_df, nan_percent_thrsh
 
 du.search_explore.dataframe_missing_values(cdr_df)
 
-# Features such as overall survival (`OS`), progression-free interval (`PFI`), disease-specific survival (`DSS`), `vital_status`, `tumor_status`, `initial_pathologic_dx_year`, `birth_days_to` and `last_contact_days_to`,  might not be relevant for this use case. Also, both `type` and `histological_type` already indicate what tumor type it is, which is our intended label, so we must remove them.
+# Features such as overall survival (`OS`), progression-free interval (`PFI`), disease-specific survival (`DSS`), `vital_status`, `tumor_status`, `initial_pathologic_dx_year`, `birth_days_to` and `last_contact_days_to`,  might not be relevant for this use case. Also, `histological_type` is redundant with `type`, which is our intended label, while having more missing values, so we must remove it.
 
 cdr_df = cdr_df.drop(columns=['Unnamed: 0', 'OS', 'PFI', 'DSS',
                               'OS.time', 'DSS.time', 'PFI.time',
                               'vital_status', 'tumor_status', 
                               'initial_pathologic_dx_year', 'birth_days_to',
-                              'last_contact_days_to', 'type',
-                              'histological_type'], axis=1)
+                              'last_contact_days_to', 'histological_type'], axis=1)
+cdr_df.head()
+
+# Change label name to a more intuitive one:
+
+cdr_df = cdr_df.rename(columns={'type': 'tumor_type_label'})
 cdr_df.head()
 
 # ### Converting categorical features to numeric
