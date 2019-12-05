@@ -110,9 +110,6 @@ class MLP(nn.Module):
         return output
 
     def loss(self, y_pred, y_labels):
-        # [TODO] Consider replacing all of this with a standard loss function, like CrossEntropyLoss or
-        # NLLLoss; they could be more efficient and elegant, but I wouldn't be able to get the output
-        # probabilities directly
         # Flatten all the labels and make it have type long instead of float
         y_labels = y_labels.contiguous().view(-1).long()
         # Flatten all predictions

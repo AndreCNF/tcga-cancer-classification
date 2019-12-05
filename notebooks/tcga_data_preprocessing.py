@@ -696,7 +696,7 @@ features_to_encode = ['race', 'ajcc_pathologic_tumor_stage']
 encod_dict = dict([('gender', dict([('male' , 1), ('female', 0)]))])
 
 for feature in features_to_encode:
-    cdr_df[feature], encod_dict[feature] = du.embedding.enum_categorical_feature(cdr_df, feature)
+    cdr_df[feature], encod_dict[feature] = du.embedding.enum_categorical_feature(cdr_df, feature, forbidden_digit=None)
 
 cdr_df.head()
 

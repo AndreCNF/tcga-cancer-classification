@@ -27,6 +27,7 @@
 
 # + {"colab": {}, "colab_type": "code", "id": "G5RrWE9R_Nkl"}
 import os                                  # os handles directory/workspace changes
+import torch                               # PyTorch to create and apply deep learning models
 # -
 
 # Debugging packages
@@ -175,9 +176,17 @@ tcga_df
 id_columns = [col for col in tcga_df if '_id' in col]
 id_columns
 
-id_columns.remove('sample_id')
+tcga_df[id_columns].head()
+
+id_columns.remove('sample_id_x')
 tcga_df = tcga_df.drop(columns=id_columns)
+tcga_df = tcga_df.rename(columns={'sample_id_x': 'sample_id'})
 tcga_df
+
+id_columns = [col for col in tcga_df if '_id' in col]
+id_columns
+
+tcga_df[id_columns].head()
 
 # ### Performing imputation
 
@@ -201,5 +210,33 @@ tcga_df.head()
 tcga_df.to_csv(f'{data_path}normalized/tcga.csv')
 
 # ### Experimenting with tensor conversion
+
+tcga_df = pd.read_csv(f'{data_path}normalized/tcga.csv')
+tcga_df.head()
+
+tcga_df.sample_id.value_counts()
+
+tcga_df.dtypes
+
+# Remove the original string ID column and use the numeric one instead:
+
+tcga_df = tcga_df.drop(columns=['sample_id'], axis=1)
+tcga_df = tcga_df.rename(columns={'Unnamed: 0': 'sample_id'})
+tcga_df.head()
+
+# Convert the label to a numeric format:
+
+tcga_df.tumor_type_label.value_counts()
+
+tcga_df['tumor_type_label'], label_dict = du.embedding.enum_categorical_feature(tcga_df, 'tumor_type_label', 
+                                                                                nan_value=0, clean_name=False)
+tcga_df.tumor_type_label.value_counts()
+
+label_dict
+
+tcga_df.dtypes
+
+tcga_tsr = torch.from_numpy(tcga_df.to_numpy())
+tcga_tsr
 
 
