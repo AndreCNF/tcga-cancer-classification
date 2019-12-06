@@ -75,7 +75,7 @@ tcga_df.head()
 
 tcga_df.tumor_type_label.value_counts()
 
-tcga_df['tumor_type_label'], label_dict = du.embedding.enum_categorical_feature(tcga_df, 'tumor_type_label', 
+tcga_df['tumor_type_label'], label_dict = du.embedding.enum_categorical_feature(tcga_df, 'tumor_type_label', nan_value=None,
                                                                                 forbidden_digit=None, clean_name=False)
 tcga_df.tumor_type_label.value_counts()
 
@@ -149,20 +149,12 @@ model
 
 # Training and testing:
 
-tcga_df.ajcc_pathologic_tumor_stage.nunique()
-
-tcga_df.ajcc_pathologic_tumor_stage.unique()
-
-tcga_df.tumor_type_label.nunique()
-
-tcga_df.tumor_type_label.unique()
-
 # + {"pixiedust": {"displayParams": {}}}
-# # %%pixie_debugger
 du.machine_learning.train(model, train_dataloader, val_dataloader, cols_to_remove=0,
-                                                model_type='mlp', batch_size=batch_size, n_epochs=n_epochs, 
-                                                lr=lr, model_path='models/', ModelClass=Models.MLP, do_test=True, 
-                                                log_comet_ml=True, comet_ml_api_key='jiDa6SsGNoyddaLPZESuAO6qi',
+                                                model_type='mlp', batch_size=batch_size, n_epochs=n_epochs,
+                                                lr=lr, model_path='code/tcga-cancer-classification/models/',
+                                                ModelClass=Models.MLP, do_test=True, log_comet_ml=True,
+                                                comet_ml_api_key='jiDa6SsGNoyddaLPZESuAO6qi',
                                                 comet_ml_project_name='tcga-tumor-classification',
                                                 comet_ml_workspace='andrecnf',
                                                 comet_ml_save_model=True, features_list=list(tcga_df.columns),
@@ -171,6 +163,10 @@ print(f'Minimium validation loss: {val_loss_min}')
 # -
 
 
-# + {"active": ""}
-#
+tcga_df.ajcc_pathologic_tumor_stage.nunique()
 
+tcga_df.ajcc_pathologic_tumor_stage.unique()
+
+tcga_df.tumor_type_label.nunique()
+
+tcga_df.tumor_type_label.unique()

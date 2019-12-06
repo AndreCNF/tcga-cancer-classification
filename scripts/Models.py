@@ -1,6 +1,6 @@
 import torch                            # PyTorch to create and apply deep learning models
 from torch import nn, optim             # nn for neural network layers and optim for training optimizers
-from torch.nn import functional as F    # Module containing several activation functions
+import torch.nn.functional as F         # Pytorch activation functions, to introduce non-linearoity and get output probabilities
 import math                             # Useful package for logarithm operations
 from data_utils import embedding        # Embeddings and other categorical features handling methods
 
@@ -86,6 +86,9 @@ class MLP(nn.Module):
         if self.use_batch_norm is True:
             # Batch normalization used between the hidden layers
             self.batch_norm = nn.BatchNorm1d(num_features=self.mlp_n_inputs)
+        if self.n_outputs > 1:
+            # Use the standard negative log likelihood loss function
+            self.criterion = nn.NLLLoss()
 
     def forward(self, x):
         if self.embed_features is not None:
@@ -100,30 +103,40 @@ class MLP(nn.Module):
             # Apply the current layer
             x = self.linear_layers[i](x)
             if i < self.n_layers - 1:
-                # Apply dropout if it's not the final layer
-                x = self.dropout(x)
+                # Apply ReLU activation function and dropout if it's not the final layer
+                x = self.dropout(F.relu(x))
                 if self.use_batch_norm is True:
                     # Also apply batch normalization
                     x = self.batch_norm(x)
-        # Classification scores after applying all the layers and sigmoid activation
-        output = torch.sigmoid(x)
+        # Classification scores after applying all the layers and activation function
+        if self.n_outputs == 1:
+            output = F.sigmoid(x)
+        else:
+            # Normalize outputs on their last dimension
+            output = F.softmax(x, dim=len(x.shape)-1)
         return output
 
     def loss(self, y_pred, y_labels):
-        # Flatten all the labels and make it have type long instead of float
-        y_labels = y_labels.contiguous().view(-1).long()
-        # Flatten all predictions
-        y_pred = y_pred.view(-1, self.n_outputs)
-        # Check if there's only one class to classify (either it belongs to that class or it doesn't)
         if self.n_outputs == 1:
-            # Add a column to the predictions tensor with the probability of not being part of the
-            # class being used
-            y_pred_other_class = 1 - y_pred
-            y_pred = torch.stack([y_pred_other_class, y_pred]).permute(1, 0, 2).squeeze()
-        # Pick the values for the label and zero out the rest with the mask
-        y_pred = y_pred[range(y_pred.shape[0]), y_labels]
-        # Number of samples
-        n_samples = y_pred.shape[0]
-        # Compute cross entropy loss which ignores all padding values
-        ce_loss = -torch.sum(torch.log(y_pred)) / n_samples
+            # Flatten all the labels and make it have type long instead of float
+            y_labels = y_labels.contiguous().view(-1).long()
+            # Flatten all predictions
+            y_pred = y_pred.view(-1, self.n_outputs)
+            # Check if there's only one class to classify (either it belongs to that class or it doesn't)
+            if self.n_outputs == 1:
+                # Add a column to the predictions tensor with the probability of not being part of the
+                # class being used
+                y_pred_other_class = 1 - y_pred
+                y_pred = torch.stack([y_pred_other_class, y_pred]).permute(1, 0, 2).squeeze()
+            # Pick the values for the label and zero out the rest with the mask
+            y_pred = y_pred[range(y_pred.shape[0]), y_labels]
+            # Number of samples
+            n_samples = y_pred.shape[0]
+            # Compute negative log likelihood loss
+            ce_loss = -torch.sum(torch.log(y_pred)) / n_samples
+        else:
+            # Make sure that the labels are in long format
+            y_labels = y_labels.long()
+            # Compute negative log likelihood loss
+            ce_loss = self.criterion(torch.log(y_pred), y_labels)
         return ce_loss
