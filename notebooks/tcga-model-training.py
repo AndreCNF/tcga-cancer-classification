@@ -75,7 +75,7 @@ tcga_df.head()
 
 tcga_df.tumor_type_label.value_counts()
 
-tcga_df['tumor_type_label'], label_dict = du.embedding.enum_categorical_feature(tcga_df, 'tumor_type_label', nan_value=None,
+tcga_df['tumor_type_label'], label_dict = du.embedding.enum_categorical_feature(tcga_df, 'tumor_type_label', nan_value=None, 
                                                                                 forbidden_digit=None, clean_name=False)
 tcga_df.tumor_type_label.value_counts()
 
@@ -109,8 +109,7 @@ train_dataloader, val_dataloader, test_dataloader = du.machine_learning.create_t
 
 # Training hyperparameters:
 
-batch_size = 32                                 # Number of patients in a mini batch
-n_epochs = 50                                   # Number of epochs
+n_epochs = 20                                   # Number of epochs
 lr = 0.001                                      # Learning rate
 
 # ### MLP with embedding layer
@@ -119,9 +118,9 @@ lr = 0.001                                      # Learning rate
 
 n_ids = tcga_df.sample_id.nunique()           # Total number of sequences
 n_inputs = len(tcga_df.columns)               # Number of input features
-n_hidden = [10000, 5000, 1000, 750, 500, 250, 200, 100, 50] # Number of hidden units
+n_hidden = [100]    # Number of hidden units
 n_outputs = tcga_df.tumor_type_label.nunique() # Number of outputs
-n_layers = 10                                 # Number of MLP layers
+n_layers = 2                                  # Number of MLP layers
 p_dropout = 0.2                               # Probability of dropout
 use_batch_norm = False                        # Indicates if batch normalization is applied
 embedding_dim = [3, 3]                        # Embedding dimensions for each categorical feature
@@ -150,8 +149,8 @@ model
 # Training and testing:
 
 # + {"pixiedust": {"displayParams": {}}}
-du.machine_learning.train(model, train_dataloader, val_dataloader, cols_to_remove=0,
-                                                model_type='mlp', batch_size=batch_size, n_epochs=n_epochs,
+model, val_loss_min = du.machine_learning.train(model, train_dataloader, val_dataloader, cols_to_remove=0,
+                                                model_type='mlp', batch_size=batch_size, n_epochs=n_epochs, 
                                                 lr=lr, model_path='code/tcga-cancer-classification/models/',
                                                 ModelClass=Models.MLP, do_test=True, log_comet_ml=True,
                                                 comet_ml_api_key='jiDa6SsGNoyddaLPZESuAO6qi',
@@ -162,11 +161,3 @@ du.machine_learning.train(model, train_dataloader, val_dataloader, cols_to_remov
 print(f'Minimium validation loss: {val_loss_min}')
 # -
 
-
-tcga_df.ajcc_pathologic_tumor_stage.nunique()
-
-tcga_df.ajcc_pathologic_tumor_stage.unique()
-
-tcga_df.tumor_type_label.nunique()
-
-tcga_df.tumor_type_label.unique()

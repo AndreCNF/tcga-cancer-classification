@@ -90,7 +90,7 @@ class MLP(nn.Module):
             # Use the standard negative log likelihood loss function
             self.criterion = nn.NLLLoss()
 
-    def forward(self, x):
+    def forward(self, x, log_output=False):
         if self.embed_features is not None:
             # Run each embedding layer on each respective feature, adding the
             # resulting embedding values to the tensor and removing the original,
@@ -108,12 +108,20 @@ class MLP(nn.Module):
                 if self.use_batch_norm is True:
                     # Also apply batch normalization
                     x = self.batch_norm(x)
-        # Classification scores after applying all the layers and activation function
-        if self.n_outputs == 1:
-            output = F.sigmoid(x)
+        if log_output is True:
+            # Classification log scores, useful for calculating a negative log likelihood loss later
+            if self.n_outputs == 1:
+                output = F.logsigmoid(x)
+            else:
+                # Normalize outputs on their last dimension
+                output = F.log_softmax(x, dim=len(x.shape)-1)
         else:
-            # Normalize outputs on their last dimension
-            output = F.softmax(x, dim=len(x.shape)-1)
+            # Classification probability scores after applying all the layers and activation function
+            if self.n_outputs == 1:
+                output = F.sigmoid(x)
+            else:
+                # Normalize outputs on their last dimension
+                output = F.softmax(x, dim=len(x.shape)-1)
         return output
 
     def loss(self, y_pred, y_labels):
@@ -128,15 +136,14 @@ class MLP(nn.Module):
                 # class being used
                 y_pred_other_class = 1 - y_pred
                 y_pred = torch.stack([y_pred_other_class, y_pred]).permute(1, 0, 2).squeeze()
-            # Pick the values for the label and zero out the rest with the mask
-            y_pred = y_pred[range(y_pred.shape[0]), y_labels]
-            # Number of samples
-            n_samples = y_pred.shape[0]
+            # [TODO] Test also applying the standard negative log likelihood loss function here
             # Compute negative log likelihood loss
-            ce_loss = -torch.sum(torch.log(y_pred)) / n_samples
+            nll_loss = self.criterion(y_pred, y_labels)
         else:
             # Make sure that the labels are in long format
             y_labels = y_labels.long()
             # Compute negative log likelihood loss
-            ce_loss = self.criterion(torch.log(y_pred), y_labels)
-        return ce_loss
+            # [TODO] This log is likely the cause of all evil (NaN loss);
+            # experiment using my custom loss function, without calling a standard PyTorch loss function that requires logs
+            nll_loss = self.criterion(y_pred, y_labels)
+        return nll_loss
