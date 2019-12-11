@@ -86,11 +86,10 @@ class MLP(nn.Module):
         if self.use_batch_norm is True:
             # Batch normalization used between the hidden layers
             self.batch_norm = nn.BatchNorm1d(num_features=self.mlp_n_inputs)
-        if self.n_outputs > 1:
-            # Use the standard negative log likelihood loss function
-            self.criterion = nn.NLLLoss()
+        # Use the standard cross entropy function
+        self.criterion = nn.CrossEntropyLoss()
 
-    def forward(self, x, log_output=False):
+    def forward(self, x, prob_output=True):
         if self.embed_features is not None:
             # Run each embedding layer on each respective feature, adding the
             # resulting embedding values to the tensor and removing the original,
@@ -108,20 +107,16 @@ class MLP(nn.Module):
                 if self.use_batch_norm is True:
                     # Also apply batch normalization
                     x = self.batch_norm(x)
-        if log_output is True:
-            # Classification log scores, useful for calculating a negative log likelihood loss later
-            if self.n_outputs == 1:
-                output = F.logsigmoid(x)
-            else:
-                # Normalize outputs on their last dimension
-                output = F.log_softmax(x, dim=len(x.shape)-1)
-        else:
-            # Classification probability scores after applying all the layers and activation function
+        if prob_output is True:
+            # Get the outputs in the form of probabilities
             if self.n_outputs == 1:
                 output = F.sigmoid(x)
             else:
                 # Normalize outputs on their last dimension
                 output = F.softmax(x, dim=len(x.shape)-1)
+        else:
+            # Just return the logits
+            output = x
         return output
 
     def loss(self, y_pred, y_labels):
@@ -136,13 +131,13 @@ class MLP(nn.Module):
                 # class being used
                 y_pred_other_class = 1 - y_pred
                 y_pred = torch.stack([y_pred_other_class, y_pred]).permute(1, 0, 2).squeeze()
-            # [TODO] Test also applying the standard negative log likelihood loss function here
-            # Compute negative log likelihood loss
+            # [TODO] Test also applying the standard cross entropy loss function here
+            # Compute cross entropy loss
             nll_loss = self.criterion(y_pred, y_labels)
         else:
             # Make sure that the labels are in long format
             y_labels = y_labels.long()
-            # Compute negative log likelihood loss
+            # Compute cross entropy loss
             # [TODO] This log is likely the cause of all evil (NaN loss);
             # experiment using my custom loss function, without calling a standard PyTorch loss function that requires logs
             nll_loss = self.criterion(y_pred, y_labels)
