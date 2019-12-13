@@ -29,7 +29,13 @@
 import os                                  # os handles directory/workspace changes
 import torch                               # PyTorch to create and apply deep learning models
 import sys
+import numpy as np                         # NumPy for simple mathematical operations
+import shap                                # Interpretability package with intuitive pltos
 # -
+
+# Initialize the javascript visualization library to allow for shap plots:
+
+shap.initjs()
 
 # Debugging packages
 import pixiedust                           # Debugging in Jupyter Notebook cells
@@ -114,6 +120,12 @@ val_features
 
 len(train_features)
 
+# ## Denormalizing the data
+#
+# [TODO]
+
+tcga_df.columns
+
 # ## Loading the model
 
 # + {"pixiedust": {"displayParams": {}}}
@@ -141,29 +153,99 @@ feat_names
 
 interpreter = ModelInterpreter(model, data=dataset.X, labels=dataset.y, model_type='mlp',
                                id_column=0, inst_column=None,
-                               fast_calc=True, SHAP_bkgnd_samples=1000,
+                               fast_calc=True, SHAP_bkgnd_samples=500,
                                random_seed=42, feat_names=feat_names)
 interpreter
 
 # Calculate feature importance:
 
 # + {"pixiedust": {"displayParams": {}}}
-# # %%pixie_debugger
-feat_scores = interpreter.interpret_model(bkgnd_data=train_features, test_data=test_features, test_labels=test_labels,
-                                          new_data=False, model_type='mlp', instance_importance=False, 
-                                          feature_importance='shap', fast_calc=True, see_progress=True, save_data=False, 
-                                          debug_loss=False)
-feat_scores
+interpreter.interpret_model(bkgnd_data=train_features, test_data=test_features[0].unsqueeze(0), test_labels=test_labels,
+                            new_data=False, model_type='mlp', instance_importance=False, 
+                            feature_importance='shap', fast_calc=True, see_progress=True, save_data=False, 
+                            debug_loss=False)
+interpreter.feat_scores
 # -
 
-train_features.shape
+# The interpreter gets different feature importance arrays for each output (in this case, each of the 33 possible tumor types), with one contribution value for each feature:
 
-train_features
+len(interpreter.feat_scores)
 
-print('hello world!')
+[scores.sum() for scores in interpreter.feat_scores]
 
-val_features[:, 1:].shape
+# It appears that only the predicted class (the output with highest score) has the feature importance scores summing to one.
 
-print('hello world!')
+np.argmax([scores.sum() for scores in interpreter.feat_scores])
+
+pred = model(test_features[0, 1:].unsqueeze(0)).topk(1).indices.item()
+pred
+
+int(test_labels[0])
+
+# [TODO] Get a denormalized version of the tensors so as to see the original values in the plots.
+
+# ### Summary plot
+
+np.array(interpreter.feat_scores).shape
+
+test_features[0, 1:].unsqueeze(0).numpy().shape
+
+# Summary plot with all 33 tumor types (i.e. all output classes):
+
+shap.summary_plot(interpreter.feat_scores, 
+                  features=test_features[0, 1:].unsqueeze(0).numpy(), 
+                  feature_names=feat_names, plot_type='bar',
+                  plot_size=(15, 10))
+
+#
+
+# Summary plot for just one specific tumor type (i.e. just one output class):
+
+output_class = 21
+
+shap.summary_plot(np.array(interpreter.feat_scores)[output_class], 
+                  features=test_features[0, 1:].unsqueeze(0).numpy(), 
+                  feature_names=feat_names, plot_type='bar',
+                  plot_size=(15, 10))
+
+# ### Sample force plot
+
+sample = 0
+
+# +
+# [TODO] Not being able to do force plots on multiple outputs
+# shap.force_plot(interpreter.explainer.expected_value, 
+#                 interpreter.feat_scores, 
+#                 features=test_features[sample, 1:].unsqueeze(0).numpy(), 
+#                 feature_names=feat_names)
+# -
+
+shap.force_plot(interpreter.explainer.expected_value[pred], 
+                interpreter.feat_scores[pred], 
+                features=test_features[sample, 1:].unsqueeze(0).numpy(), 
+                feature_names=feat_names)
+
+# ### Sample decision plot
+
+sample = 0
+
+# +
+# [TODO] Not being able to do decision plots on multiple outputs
+# shap.multioutput_decision_plot(interpreter.explainer.expected_value, 
+#                                interpreter.feat_scores, row_index=0,
+#                                features=test_features[sample, 1:].unsqueeze(0).numpy(), 
+#                                feature_names=feat_names)
+# -
+
+shap.decision_plot(interpreter.explainer.expected_value[pred], 
+                   interpreter.feat_scores[pred], 
+                   features=test_features[sample, 1:].unsqueeze(0).numpy(), 
+                   feature_names=feat_names)
+
+test_features[:, 1:].shape
+
+test_features[0].shape
+
+test_features[0].unsqueeze(0).shape
 
 
