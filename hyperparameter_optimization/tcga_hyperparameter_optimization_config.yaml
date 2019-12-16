@@ -1,0 +1,36 @@
+algorithm: bayes
+spec:
+  metric: val_loss
+  objective: minimize
+  maxCombo: 100
+  seed: 42
+  retryLimit: 20
+parameters:
+  lr:
+    type: float
+    min: 0.001
+    max: 1.0
+    scalingType: loguniform
+  n_hidden_1:
+    type: int
+    min: 50
+    max: 1000
+    scalingType: uniform
+  embedding_dim_1:
+    type: int
+    min: 3
+    max: 5
+    scalingType: uniform
+  embedding_dim_2:
+    type: int
+    min: 3
+    max: 20
+    scalingType: uniform
+  p_dropout:
+    type: float
+    min: 0
+    max: 0.5
+    scalingType: uniform
+  use_batch_norm:
+    type: discrete
+    values: [0, 1]

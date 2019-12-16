@@ -2,6 +2,7 @@ import torch                            # PyTorch to create and apply deep learn
 from torch import nn, optim             # nn for neural network layers and optim for training optimizers
 import torch.nn.functional as F         # Pytorch activation functions, to introduce non-linearoity and get output probabilities
 import math                             # Useful package for logarithm operations
+import numpy as np                                      # NumPy to handle numeric and NaN operations
 from data_utils import embedding        # Embeddings and other categorical features handling methods
 
 # [TODO] Create new classes for each model type and add options to include
@@ -90,6 +91,9 @@ class MLP(nn.Module):
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x, prob_output=True):
+        if isinstance(x, np.ndarray):
+            # Convert from NumPy array to PyTorch tensor
+            x = torch.from_numpy(x)
         if self.embed_features is not None:
             # Run each embedding layer on each respective feature, adding the
             # resulting embedding values to the tensor and removing the original,
