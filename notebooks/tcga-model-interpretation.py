@@ -34,6 +34,7 @@ from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, f1_score, log_loss, roc_auc_score
 import joblib                              # Save scikit-learn models in disk
 from datetime import datetime              # datetime to use proper date and time formats
+import time                                # Measure code execution time
 import sys
 import numpy as np                         # NumPy for simple mathematical operations
 import shap                                # Interpretability package with intuitive plots
@@ -199,15 +200,17 @@ len(sckt_train_features)
 # ### Loading the model
 
 # + {"pixiedust": {"displayParams": {}}}
-model = du.deep_learning.load_checkpoint(filepath=f'{models_path}checkpoint_08_12_2019_05_24.pth', ModelClass=Models.MLP)
-model
+mlp_model = du.deep_learning.load_checkpoint(filepath=f'{models_path}checkpoint_08_12_2019_05_24.pth', ModelClass=Models.MLP)
+mlp_model
 # -
 
 # Check performance metrics:
 
-output, metrics = du.deep_learning.model_inference(model, dataloader=test_dataloader, metrics=['loss', 'accuracy', 'AUC', 'AUC_weighted'],
+# + {"pixiedust": {"displayParams": {}}}
+output, metrics = du.deep_learning.model_inference(mlp_model, dataloader=test_dataloader, metrics=['loss', 'accuracy', 'AUC', 'AUC_weighted'],
                                                    model_type='mlp', cols_to_remove=0)
 metrics
+# -
 
 # ### Interpreting the model
 
@@ -217,50 +220,68 @@ feat_names = list(tcga_df.columns)
 feat_names.remove('sample_id')
 feat_names.remove('tumor_type_label')
 
-feat_names
+# +
+# feat_names
+# -
 
 # Create a model interpreter object:
 
-interpreter = ModelInterpreter(model, data=dataset.X, labels=dataset.y, model_type='mlp',
-                               id_column=0, inst_column=None,
-                               fast_calc=True, SHAP_bkgnd_samples=500,
-                               random_seed=42, feat_names=feat_names)
-interpreter
+# +
+# shap.DeepExplainer?
+# -
+
+mlp_explainer = shap.DeepExplainer(mlp_model)
+
+# +
+# interpreter = ModelInterpreter(model, data=dataset.X, labels=dataset.y, model_type='mlp',
+#                                id_column=0, inst_column=None,
+#                                fast_calc=True, SHAP_bkgnd_samples=500,
+#                                random_seed=42, feat_names=feat_names)
+# interpreter
+# -
 
 # Calculate feature importance:
 
-# + {"pixiedust": {"displayParams": {}}}
-interpreter.interpret_model(bkgnd_data=train_features, test_data=test_features[:1000], test_labels=test_labels,
-                            new_data=False, model_type='mlp', instance_importance=False, 
-                            feature_importance='shap', fast_calc=True, see_progress=True, save_data=False, 
-                            debug_loss=False)
-interpreter.feat_scores
-# -
+# +
+# mlp_explainer.shap_values?
 
-# Path where the model interpreter will be saved
-interpreter_path = 'code/tcga-cancer-classification/interpreters/'
+# + {"pixiedust": {"displayParams": {}}}
+start = time.time()
+mlp_shap_values = mlp_explainer.shap_values(test_features[:1000])
+display(mlp_shap_values)
+end = time.time()
+print(f'Cell execution time: {end - start} s')
+
+# + {"pixiedust": {"displayParams": {}}}
+# interpreter.interpret_model(bkgnd_data=train_features, test_data=test_features[:1000], test_labels=test_labels,
+#                             new_data=False, model_type='mlp', instance_importance=False, 
+#                             feature_importance='shap', fast_calc=True, see_progress=True, save_data=False, 
+#                             debug_loss=False)
+# interpreter.feat_scores
+# -
 
 # Get the current day and time to attach to the saved model's name
 current_datetime = datetime.now().strftime('%d_%m_%Y_%H_%M')
 # Filename and path where the model will be saved
-interpreter_filename = f'{interpreter_path}checkpoint_{current_datetime}.pickle'
+interpreter_filename = f'{interpreter_path}mlp/checkpoint_{current_datetime}.pickle'
 # Save model interpreter object, with the instance and feature importance scores, in a pickle file
-joblib.dump(interpreter, interpreter_filename)
+# joblib.dump(interpreter, interpreter_filename)
+joblib.dump(mlp_interpreter, interpreter_filename)
 
-interpreter = joblib.load(interpreter_filename)
-interpreter
+mlp_shap_values = joblib.load(interpreter_filename)
+mlp_shap_values
 
 # The interpreter gets different feature importance arrays for each output (in this case, each of the 33 possible tumor types), with one contribution value for each feature:
 
-len(interpreter.feat_scores)
+len(mlp_shap_values)
 
-[scores.sum() for scores in interpreter.feat_scores]
+[scores.sum() for scores in mlp_shap_values]
 
 # It appears that only the predicted class (the output with highest score) has the feature importance scores summing to one.
 
-np.argmax([scores.sum() for scores in interpreter.feat_scores])
+np.argmax([scores.sum() for scores in mlp_shap_values])
 
-pred = model(test_features[0, 1:].unsqueeze(0)).topk(1).indices.item()
+pred = mlp_model(test_features[0, 1:].unsqueeze(0)).topk(1).indices.item()
 pred
 
 int(test_labels[0])
@@ -269,16 +290,12 @@ int(test_labels[0])
 
 # #### Summary plot
 
-np.array(interpreter.feat_scores).shape
-
-test_features[0, 1:].unsqueeze(0).numpy().shape
-
 # Summary plot with all 33 tumor types (i.e. all output classes):
 
-test_features[:1000, 1:].unsqueeze(0).numpy().shape
+test_features[:1000, 1:].unsqueeze(0).shape
 
-shap.summary_plot(interpreter.feat_scores, 
-                  features=test_features[:1000, 1:].numpy(), 
+shap.summary_plot(mlp_shap_values,
+                  features=test_features[:1000, 1:], 
                   feature_names=feat_names, plot_type='bar',
                   plot_size=(15, 10))
 
@@ -286,8 +303,8 @@ shap.summary_plot(interpreter.feat_scores,
 
 output_class = 21
 
-shap.summary_plot(np.array(interpreter.feat_scores)[output_class], 
-                  features=test_features[:1000, 1:].numpy(), 
+shap.summary_plot(mlp_shap_values[output_class], 
+                  features=test_features[:1000, 1:], 
                   feature_names=feat_names, plot_type='bar',
                   plot_size=(15, 10))
 
@@ -303,9 +320,9 @@ sample = 0
 #                 feature_names=feat_names)
 # -
 
-shap.force_plot(interpreter.explainer.expected_value[pred], 
-                interpreter.feat_scores[pred], 
-                features=test_features[sample, 1:].unsqueeze(0).numpy(), 
+shap.force_plot(mlp_explainer.expected_value[pred], 
+                mlp_shap_values[pred], 
+                features=test_features[sample, 1:].unsqueeze(0), 
                 feature_names=feat_names)
 
 # #### Sample decision plot
@@ -320,9 +337,9 @@ sample = 0
 #                                feature_names=feat_names)
 # -
 
-shap.decision_plot(interpreter.explainer.expected_value[pred], 
-                   interpreter.feat_scores[pred], 
-                   features=test_features[sample, 1:].unsqueeze(0).numpy(), 
+shap.decision_plot(mlp_explainer.expected_value[pred], 
+                   mlp_shap_values[pred], 
+                   features=test_features[sample, 1:].unsqueeze(0), 
                    feature_names=feat_names)
 
 test_features[:, 1:].shape
@@ -378,9 +395,7 @@ feat_names.remove('tumor_type_label')
 # # shap.KernelExplainer?
 # -
 
-explainer = shap.TreeExplainer(logreg_model, sckt_train_features.numpy(), feature_dependence='independent')
-# explainer = shap.LinearExplainer(logreg_model, np.zeros((1, len(feat_names))), 
-#                                  feature_dependence="independent")
+xgb_explainer = shap.TreeExplainer(xgb_model, sckt_train_features.numpy(), feature_dependence='independent')
 # explainer = shap.KernelExplainer(logreg_model.predict_proba, np.zeros((1, len(feat_names))), link='logit')
 # explainer = shap.KernelExplainer(logreg_model.predict_proba, np.zeros((1, len(feat_names))), link='logit', max_bkgnd_samples=100)
 # explainer = shap.KernelExplainer(logreg_model.predict_proba, np.zeros((1, len(feat_names))))
@@ -390,9 +405,12 @@ explainer = shap.TreeExplainer(logreg_model, sckt_train_features.numpy(), featur
 # Calculate feature importance:
 
 # + {"pixiedust": {"displayParams": {}}}
+start = time.time()
 # shap_values = explainer.shap_values(sckt_test_features.numpy(), l1_reg='num_features(20)', nsamples=500)
-shap_values = explainer.shap_values(sckt_test_features[:1000].numpy(), l1_reg='num_features(10)', nsamples=1000)
-shap_values
+xgb_shap_values = xgb_explainer.shap_values(sckt_test_features[:1000].numpy(), l1_reg='num_features(10)', nsamples=1000)
+display(xgb_shap_values)
+end = time.time()
+print(f'Cell execution time: {end - start} s')
 # -
 
 # Get the current day and time to attach to the saved model's name
@@ -400,22 +418,22 @@ current_datetime = datetime.now().strftime('%d_%m_%Y_%H_%M')
 # Filename and path where the model will be saved
 interpreter_filename = f'{interpreter_path}xgb/checkpoint_{current_datetime}.pickle'
 # Save calculated SHAP values in a pickle file
-joblib.dump(shap_values, interpreter_filename)
+joblib.dump(xgb_shap_values, interpreter_filename)
 
-shap_values = joblib.load(interpreter_filename)
-shap_values
+xgb_shap_values = joblib.load(interpreter_filename)
+xgb_shap_values
 
 # The interpreter gets different feature importance arrays for each output (in this case, each of the 33 possible tumor types), with one contribution value for each feature:
 
-len(shap_values)
+len(xgb_shap_values)
 
-[scores.sum() for scores in shap_values]
+[scores.sum() for scores in xgb_shap_values]
 
 # It appears that only the predicted class (the output with highest score) has the feature importance scores summing to one.
 
-np.argmax([scores.sum() for scores in shap_values])
+np.argmax([scores.sum() for scores in xgb_shap_values])
 
-pred = model(sckt_test_features[0].unsqueeze(0)).topk(1).indices.item()
+pred = xgb_model(sckt_test_features[0].unsqueeze(0)).topk(1).indices.item()
 pred
 
 int(test_labels[0])
@@ -424,9 +442,9 @@ int(test_labels[0])
 
 # #### Summary plot
 
-np.array(shap_values).shape
+np.array(xgb_shap_values).shape
 
-shap_values.shape
+xgb_shap_values.shape
 
 sckt_test_features[0].unsqueeze(0).numpy().shape
 
@@ -434,7 +452,7 @@ sckt_test_features[0].unsqueeze(0).numpy().shape
 
 sckt_test_features[:1000].unsqueeze(0).numpy().shape
 
-shap.summary_plot(shap_values, 
+shap.summary_plot(xgb_shap_values, 
                   features=sckt_test_features[:1000].numpy(), 
                   feature_names=feat_names, plot_type='bar',
                   plot_size=(15, 10))
@@ -443,7 +461,7 @@ shap.summary_plot(shap_values,
 
 output_class = 21
 
-shap.summary_plot(shap_values[output_class], 
+shap.summary_plot(xgb_shap_values[output_class], 
                   features=sckt_test_features[:1000].numpy(), 
                   feature_names=feat_names, plot_type='bar',
                   plot_size=(15, 10))
@@ -460,8 +478,8 @@ sample = 0
 #                 feature_names=feat_names)
 # -
 
-shap.force_plot(shap_values.expected_value[pred], 
-                shap_values[pred], 
+shap.force_plot(xgb_explainer.expected_value[pred], 
+                xgb_shap_values[pred], 
                 features=sckt_test_features[sample].unsqueeze(0).numpy(), 
                 feature_names=feat_names)
 
@@ -477,8 +495,8 @@ sample = 0
 #                                feature_names=feat_names)
 # -
 
-shap.decision_plot(shap_values.expected_value[pred], 
-                   shap_values[pred], 
+shap.decision_plot(xgb_explainer.expected_value[pred], 
+                   xgb_shap_values[pred], 
                    features=sckt_test_features[sample].unsqueeze(0).numpy(), 
                    feature_names=feat_names)
 
@@ -541,15 +559,17 @@ feat_names.remove('tumor_type_label')
 # explainer = shap.KernelExplainer(logreg_model.predict_proba, np.zeros((1, len(feat_names))), link='logit')
 # explainer = shap.KernelExplainer(logreg_model.predict_proba, np.zeros((1, len(feat_names))), link='logit', max_bkgnd_samples=100)
 # explainer = shap.KernelExplainer(logreg_model.predict_proba, np.zeros((1, len(feat_names))))
-explainer = shap.KernelExplainer(logreg_model.predict_proba, np.zeros((1, len(feat_names))), max_bkgnd_samples=100)
+logreg_explainer = shap.KernelExplainer(logreg_model.predict_proba, np.zeros((1, len(feat_names))), max_bkgnd_samples=100)
 # explainer = shap.KernelExplainer(logreg_model.predict_proba, sckt_train_features.numpy(), link='logit')
 
 # Calculate feature importance:
 
 # + {"pixiedust": {"displayParams": {}}}
-# shap_values = explainer.shap_values(sckt_test_features.numpy(), l1_reg='num_features(20)', nsamples=500)
-shap_values = explainer.shap_values(sckt_test_features[:1000].numpy(), l1_reg='num_features(10)', nsamples=1000)
-shap_values
+start = time.time()
+logreg_shap_values = logreg_explainer.shap_values(sckt_test_features[:1000].numpy(), l1_reg='num_features(10)', nsamples=1000)
+display(logreg_shap_values)
+end = time.time()
+print(f'Cell execution time: {end - start} s')
 # -
 
 # Get the current day and time to attach to the saved model's name
@@ -557,22 +577,20 @@ current_datetime = datetime.now().strftime('%d_%m_%Y_%H_%M')
 # Filename and path where the model will be saved
 interpreter_filename = f'{interpreter_path}logreg/checkpoint_{current_datetime}.pickle'
 # Save calculated SHAP values in a pickle file
-joblib.dump(shap_values, interpreter_filename)
+joblib.dump(logreg_shap_values, interpreter_filename)
 
-shap_values = joblib.load(f'{interpreter_path}checkpoint_15_12_2019_02_06.pickle')
-shap_values
-
-print('Hello world!')
+logreg_shap_values = joblib.load(f'{interpreter_path}mlp/checkpoint_15_12_2019_02_06.pickle')
+logreg_shap_values
 
 # The interpreter gets different feature importance arrays for each output (in this case, each of the 33 possible tumor types), with one contribution value for each feature:
 
-len(shap_values)
+len(logreg_shap_values)
 
-[scores.sum() for scores in shap_values]
+[scores.sum() for scores in logreg_shap_values]
 
 # It appears that only the predicted class (the output with highest score) has the feature importance scores summing to one.
 
-np.argmax([scores.sum() for scores in shap_values])
+np.argmax([scores.sum() for scores in logreg_shap_values])
 
 pred = logreg_model(sckt_test_features[0].unsqueeze(0)).topk(1).indices.item()
 pred
@@ -583,9 +601,9 @@ int(test_labels[0])
 
 # #### Summary plot
 
-np.array(shap_values).shape
+np.array(logreg_shap_values).shape
 
-shap_values.shape
+logreg_shap_values.shape
 
 sckt_test_features[0].unsqueeze(0).numpy().shape
 
@@ -593,7 +611,7 @@ sckt_test_features[0].unsqueeze(0).numpy().shape
 
 sckt_test_features[:1000].unsqueeze(0).numpy().shape
 
-shap.summary_plot(shap_values, 
+shap.summary_plot(logreg_shap_values, 
                   features=sckt_test_features[:1000].numpy(), 
                   feature_names=feat_names, plot_type='bar',
                   plot_size=(15, 10))
@@ -602,7 +620,7 @@ shap.summary_plot(shap_values,
 
 output_class = 21
 
-shap.summary_plot(shap_values[output_class], 
+shap.summary_plot(logreg_shap_values[output_class], 
                   features=sckt_test_features[:1000].numpy(), 
                   feature_names=feat_names, plot_type='bar',
                   plot_size=(15, 10))
@@ -619,8 +637,8 @@ sample = 0
 #                 feature_names=feat_names)
 # -
 
-shap.force_plot(shap_values.expected_value[pred], 
-                shap_values[pred], 
+shap.force_plot(logreg_explainer.expected_value[pred], 
+                logreg_shap_values[pred], 
                 features=sckt_test_features[sample].unsqueeze(0).numpy(), 
                 feature_names=feat_names)
 
@@ -636,8 +654,8 @@ sample = 0
 #                                feature_names=feat_names)
 # -
 
-shap.decision_plot(shap_values.expected_value[pred], 
-                   shap_values[pred], 
+shap.decision_plot(logreg_explainer.expected_value[pred], 
+                   logreg_shap_values[pred], 
                    features=sckt_test_features[sample].unsqueeze(0).numpy(), 
                    feature_names=feat_names)
 
@@ -694,13 +712,16 @@ feat_names.remove('tumor_type_label')
 # shap.KernelExplainer?
 # -
 
-explainer = shap.KernelExplainer(svm_model.predict_proba, np.zeros((1, len(feat_names))), max_bkgnd_samples=100)
+svm_explainer = shap.KernelExplainer(svm_model.predict_proba, np.zeros((1, len(feat_names))), max_bkgnd_samples=100)
 
 # Calculate feature importance:
 
 # + {"pixiedust": {"displayParams": {}}}
-shap_values = explainer.shap_values(sckt_test_features[:1000].numpy(), l1_reg='num_features(10)', nsamples=1000)
-shap_values
+start = time.time()
+svm_shap_values = svm_explainer.shap_values(sckt_test_features[:1000].numpy(), l1_reg='num_features(10)', nsamples=1000)
+display(svm_shap_values)
+end = time.time()
+print(f'Cell execution time: {end - start} s')
 # -
 
 # Get the current day and time to attach to the saved model's name
@@ -708,20 +729,20 @@ current_datetime = datetime.now().strftime('%d_%m_%Y_%H_%M')
 # Filename and path where the model will be saved
 interpreter_filename = f'{interpreter_path}svm/checkpoint_{current_datetime}.pickle'
 # Save calculated SHAP values in a pickle file
-joblib.dump(shap_values, interpreter_filename)
+joblib.dump(svm_shap_values, interpreter_filename)
 
-shap_values = joblib.load(interpreter_filename)
-shap_values
+svm_shap_values = joblib.load(interpreter_filename)
+svm_shap_values
 
 # The interpreter gets different feature importance arrays for each output (in this case, each of the 33 possible tumor types), with one contribution value for each feature:
 
-len(shap_values)
+len(svm_shap_values)
 
-[scores.sum() for scores in shap_values]
+[scores.sum() for scores in svm_shap_values]
 
 # It appears that only the predicted class (the output with highest score) has the feature importance scores summing to one.
 
-np.argmax([scores.sum() for scores in shap_values])
+np.argmax([scores.sum() for scores in svm_shap_values])
 
 pred = svm_model(sckt_test_features[0].unsqueeze(0)).topk(1).indices.item()
 pred
@@ -732,9 +753,9 @@ int(test_labels[0])
 
 # #### Summary plot
 
-np.array(shap_values).shape
+np.array(svm_shap_values).shape
 
-shap_values.shape
+svm_shap_values.shape
 
 sckt_test_features[0].unsqueeze(0).numpy().shape
 
@@ -742,7 +763,7 @@ sckt_test_features[0].unsqueeze(0).numpy().shape
 
 sckt_test_features[:1000].unsqueeze(0).numpy().shape
 
-shap.summary_plot(shap_values, 
+shap.summary_plot(svm_shap_values, 
                   features=sckt_test_features[:1000].numpy(), 
                   feature_names=feat_names, plot_type='bar',
                   plot_size=(15, 10))
@@ -751,7 +772,7 @@ shap.summary_plot(shap_values,
 
 output_class = 21
 
-shap.summary_plot(shap_values[output_class], 
+shap.summary_plot(svm_shap_values[output_class], 
                   features=sckt_test_features[:1000].numpy(), 
                   feature_names=feat_names, plot_type='bar',
                   plot_size=(15, 10))
@@ -768,8 +789,8 @@ sample = 0
 #                 feature_names=feat_names)
 # -
 
-shap.force_plot(shap_values.expected_value[pred], 
-                shap_values[pred], 
+shap.force_plot(svm_explainer.expected_value[pred], 
+                svm_shap_values[pred], 
                 features=sckt_test_features[sample].unsqueeze(0).numpy(), 
                 feature_names=feat_names)
 
@@ -785,8 +806,8 @@ sample = 0
 #                                feature_names=feat_names)
 # -
 
-shap.decision_plot(shap_values.expected_value[pred], 
-                   shap_values[pred], 
+shap.decision_plot(svm_explainer.expected_value[pred], 
+                   svm_shap_values[pred], 
                    features=sckt_test_features[sample].unsqueeze(0).numpy(), 
                    feature_names=feat_names)
 

@@ -169,9 +169,6 @@ optional = false
 python-versions = "*"
 version = "1.0.2"
 
-[package.dependencies]
-configobj = "*"
-
 [[package]]
 category = "main"
 description = "Python support for Parquet file format"
