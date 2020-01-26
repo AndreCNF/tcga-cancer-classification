@@ -265,10 +265,28 @@ oversampled_participants = [participant for participant in list(n_samples_per_pa
 oversampled_participants
 
 # + {"Collapsed": "false"}
-for participant in oversampled_participants:
-    tcga_df[tcga_df.participant_id == participant] = (tcga_df[tcga_df.participant_id == participant]
-                                                      .sample(n=1, random_state=du.random_seed))
+len(oversampled_participants)
 
+# + {"Collapsed": "false"}
+# Replace the multiple samples of the same patient with just one, randomly selected, sample
+for participant in oversampled_participants:
+    # Randomly select one sample from the current patient's data
+    new_row = tcga_df[tcga_df.participant_id == participant].sample(n=1, random_state=du.random_seed)
+    # Remove all the patient's data
+    tcga_df = tcga_df[tcga_df.participant_id != participant]
+    # Add just the randomly selected sample
+    tcga_df = tcga_df.append(new_row)
+
+
+# + {"Collapsed": "false"}
+tcga_df.participant_id.value_counts()
+
+# + {"Collapsed": "false"}
+tcga_df.participant_id.value_counts()[['TCGA-SR-A6MX', 'TCGA-06-0211', 'TCGA-06-0125', 
+                                       'TCGA-EM-A3FQ', 'TCGA-E2-A15A']]
+
+# + {"Collapsed": "false"}
+tcga_df.head()
 
 # + [markdown] {"Collapsed": "false"}
 # ### Performing imputation
