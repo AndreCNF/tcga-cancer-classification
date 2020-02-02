@@ -27,6 +27,7 @@ xgboost = "^0.90.0"
 shap = "^0.34.0"
 joblib = "^0.14.1"
 data-utils = {git = "ssh://git@github.com:AndreCNF/data-utils.git"}
+model-interpreter = {git = "ssh://git@github.com:AndreCNF/model-interpreter.git"}
 
 [tool.poetry.dev-dependencies]
 
