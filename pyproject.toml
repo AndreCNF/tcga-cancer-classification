@@ -20,10 +20,13 @@ pixiedust = "^1.1"
 matplotlib = "^3.1"
 jinja2 = "^2.10"
 fastparquet = "^0.3.2"
-ray = "0.7.3"
-modin = "^0.6.3"
-scikit-learn = "^0.21.3"
+ray = "^0.8.1"
+modin = "^0.7.0"
+scikit-learn = "^0.22.1"
 xgboost = "^0.90.0"
+shap = "^0.34.0"
+joblib = "^0.14.1"
+data-utils = {git = "ssh://git@github.com:AndreCNF/data-utils.git"}
 
 [tool.poetry.dev-dependencies]
 

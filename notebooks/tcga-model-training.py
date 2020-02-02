@@ -83,7 +83,7 @@ tcga_df.head()
 tcga_df.info()
 
 # + {"Collapsed": "false"}
-tcga_df.sample_id.value_counts()
+tcga_df.participant_id.value_counts()
 
 # + {"Collapsed": "false"}
 tcga_df.dtypes
@@ -207,7 +207,7 @@ model
 # + {"pixiedust": {"displayParams": {}}, "Collapsed": "false"}
 model, val_loss_min = du.machine_learning.train(model, train_dataloader, val_dataloader, cols_to_remove=0,
                                                 model_type='mlp', batch_size=batch_size, n_epochs=n_epochs, 
-                                                lr=lr, model_path=f'{models_path}mlp/',
+                                                lr=lr, models_path=f'{models_path}mlp/',
                                                 ModelClass=Models.MLP, do_test=True, log_comet_ml=True,
                                                 comet_ml_api_key='jiDa6SsGNoyddaLPZESuAO6qi',
                                                 comet_ml_project_name='tcga-tumor-classification',
@@ -217,9 +217,6 @@ model, val_loss_min = du.machine_learning.train(model, train_dataloader, val_dat
 print(f'Minimium validation loss: {val_loss_min}')
 # + [markdown] {"Collapsed": "false"}
 # #### Hyperparameter optimization
-
-# + {"Collapsed": "false"}
-# ls code/tcga-cancer-classification/hyperparameter_optimization/
 
 # + {"pixiedust": {"displayParams": {}}, "Collapsed": "false"}
 # # %%pixie_debugger
@@ -384,7 +381,7 @@ acc = accuracy_score(test_labels, pred)
 acc
 
 # + {"Collapsed": "false"}
-f1 = f1_score(test_labels, pred)
+f1 = f1_score(test_labels, pred, average='weighted')
 f1
 
 # + {"Collapsed": "false"}
@@ -395,7 +392,7 @@ loss = log_loss(test_labels, pred_proba)
 loss
 
 # + {"Collapsed": "false"}
-auc = roc_auc_score(test_labels, pred_proba)
+auc = roc_auc_score(test_labels, pred_proba, multi_class='ovr', average='weighted')
 auc
 
 # + [markdown] {"Collapsed": "false"}
@@ -553,5 +550,4 @@ auc
 # + [markdown] {"Collapsed": "false"}
 # #### Hyperparameter optimization
 # + {"Collapsed": "false"}
-
 
