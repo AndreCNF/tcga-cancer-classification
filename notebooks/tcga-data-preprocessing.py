@@ -28,7 +28,6 @@
 # + {"colab": {}, "colab_type": "code", "id": "G5RrWE9R_Nkl"}
 import os                                  # os handles directory/workspace changes
 import yaml                                # Save and load YAML files
-import numpy as np                         # NumPy to handle numeric and NaN operations
 from functools import reduce               # Parallelize functions
 # -
 
@@ -202,8 +201,8 @@ dna_mthltn_df.head()
 
 du.search_explore.dataframe_missing_values(dna_mthltn_df)
 
-# The DNA composite with the most missing values only has less than 35% missingness; 
-# However, although it seems like this table has the right missing values representation, 
+# The DNA composite with the most missing values only has less than 35% missingness;
+# However, although it seems like this table has the right missing values representation,
 # we haven't done missing values standardization.
 
 # ### Removing unneeded features
@@ -665,7 +664,7 @@ du.search_explore.dataframe_missing_values(cdr_df)
 
 cdr_df = cdr_df.drop(columns=['Unnamed: 0', 'OS', 'PFI', 'DSS',
                               'OS.time', 'DSS.time', 'PFI.time',
-                              'vital_status', 'tumor_status', 
+                              'vital_status', 'tumor_status',
                               'initial_pathologic_dx_year', 'birth_days_to',
                               'last_contact_days_to', 'histological_type'], axis=1)
 cdr_df.head()
@@ -731,5 +730,3 @@ cdr_df_norm.to_csv(f'{data_path}cleaned/normalized/clinical_outcome.csv')
 
 stream = open(f'{data_path}cleaned/encod_dict.yaml', 'w')
 yaml.dump(encod_dict, stream, default_flow_style=False)
-
-

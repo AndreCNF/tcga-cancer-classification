@@ -27,16 +27,9 @@
 
 # + {"colab": {}, "colab_type": "code", "id": "G5RrWE9R_Nkl"}
 import modin.pandas as pd                  # Optimized distributed version of Pandas
-import re                                  # re to do regex searches in string data
 import plotly                              # Plotly for interactive and pretty plots
 import plotly.graph_objs as go
-from datetime import datetime              # datetime to use proper date and time formats
 import os                                  # os handles directory/workspace changes
-import numpy as np                         # NumPy to handle numeric and NaN operations
-from tqdm import tqdm_notebook             # tqdm allows to track code execution progress
-import numbers                             # numbers allows to check if data is numeric
-import torch                               # PyTorch to create and apply deep learning models
-from torch.utils.data.sampler import SubsetRandomSampler
 import data_utils as du                    # Data science and machine learning relevant methods
 # -
 

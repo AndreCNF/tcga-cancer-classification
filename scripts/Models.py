@@ -128,21 +128,18 @@ class MLP(nn.Module):
             # Flatten all the labels and make it have type long instead of float
             y_labels = y_labels.contiguous().view(-1).long()
             # Flatten all predictions
-            y_pred = y_pred.view(-1, self.n_outputs)
+            y_pred = y_pred.view(-1)
             # Check if there's only one class to classify (either it belongs to that class or it doesn't)
             if self.n_outputs == 1:
                 # Add a column to the predictions tensor with the probability of not being part of the
                 # class being used
                 y_pred_other_class = 1 - y_pred
                 y_pred = torch.stack([y_pred_other_class, y_pred]).permute(1, 0, 2).squeeze()
-            # [TODO] Test also applying the standard cross entropy loss function here
             # Compute cross entropy loss
             nll_loss = self.criterion(y_pred, y_labels)
         else:
             # Make sure that the labels are in long format
             y_labels = y_labels.long()
             # Compute cross entropy loss
-            # [TODO] This log is likely the cause of all evil (NaN loss);
-            # experiment using my custom loss function, without calling a standard PyTorch loss function that requires logs
             nll_loss = self.criterion(y_pred, y_labels)
         return nll_loss
