@@ -62,7 +62,7 @@ kiwisolver==1.1.0
 lazy-object-proxy==1.4.3
 livereload==2.6.1
 llvmlite==0.31.0
-lxml==4.5.0
+lxml==4.9.1
 Mako==1.1.0
 Markdown==3.1.1
 MarkupSafe==1.1.1
